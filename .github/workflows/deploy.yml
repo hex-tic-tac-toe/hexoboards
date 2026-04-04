@@ -1,0 +1,65 @@
+name: Deploy hexoboards
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate worker entrypoint
+        run: npm run check
+
+      - name: Deploy production worker
+        if: github.ref_name == 'main'
+        id: deploy-production
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: 'deploy --env=""'
+          quiet: true
+
+      - name: Smoke test production worker
+        if: github.ref_name == 'main'
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy-production.outputs.deployment-url }}
+        run: curl -fsS "$DEPLOYMENT_URL" >/dev/null
+
+      - name: Deploy staging worker
+        if: github.ref_name == 'staging'
+        id: deploy-staging
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env staging
+          quiet: true
+
+      - name: Smoke test staging worker
+        if: github.ref_name == 'staging'
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy-staging.outputs.deployment-url }}
+        run: curl -fsS "$DEPLOYMENT_URL" >/dev/null

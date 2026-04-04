@@ -1,0 +1,12 @@
+{
+  "libraries": [
+    {
+      "name": "Hexopedia",
+      "url": "/strategies/data/hexopedia.json"
+    },
+    {
+      "name": "Mates",
+      "url": "/strategies/data/mates.json"
+    }
+  ]
+}
