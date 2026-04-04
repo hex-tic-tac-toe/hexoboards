@@ -5,7 +5,7 @@ Cloudflare Workers/Wrangler app for **hexoboards.com** with a Vercel proxy layer
 ## What is in this repo
 
 - Static site content in `public/`
-- Imported `public/strategies/` app from `hex-tic-tac-toe/hex-tic-tac-toe.github.io`
+- Imported strategy app from `hex-tic-tac-toe/hex-tic-tac-toe.github.io`
 - Worker entrypoint in `src/index.js`
 - Wrangler config in `wrangler.jsonc`
 - GitHub Actions deploy workflow in `.github/workflows/deploy.yml`
@@ -17,6 +17,8 @@ Cloudflare Workers/Wrangler app for **hexoboards.com** with a Vercel proxy layer
 - Cloudflare staging worker: `https://hexoboards-staging.mteam88.workers.dev`
 - Public production URL: `https://hexoboards.com`
 - Public staging URL: `https://staging.hexoboards.com`
+
+The root path `/` now serves the strategy app directly. `/strategies/` redirects back to `/`.
 
 The Cloudflare worker rewrites canonical and `og:url` metadata using forwarded host/proto headers. The Vercel proxy forwards requests to the correct Cloudflare worker based on the incoming hostname.
 

@@ -15,7 +15,7 @@ function normalizeForwardedHost(value) {
   }
 }
 
-function publicUrl(request) {
+function publicRequestUrl(request) {
   const requestUrl = new URL(request.url);
   const forwardedHost = normalizeForwardedHost(request.headers.get("x-forwarded-host"));
   const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim();
@@ -30,8 +30,14 @@ function publicUrl(request) {
   }
 
   url.pathname = requestUrl.pathname;
-  url.search = "";
+  url.search = requestUrl.search;
   url.hash = "";
+  return url;
+}
+
+function publicUrl(request) {
+  const url = publicRequestUrl(request);
+  url.search = "";
   return url.toString();
 }
 
@@ -48,6 +54,13 @@ class SetAttribute {
 
 export default {
   async fetch(request, env) {
+    const url = publicRequestUrl(request);
+    if (["/strategies", "/strategies/", "/posts", "/posts/"].includes(url.pathname)) {
+      url.pathname = "/";
+      url.search = "";
+      return Response.redirect(url.toString(), 308);
+    }
+
     const assetResponse = await env.ASSETS.fetch(request);
     const contentType = assetResponse.headers.get("content-type") || "";
 
@@ -55,11 +68,11 @@ export default {
       return assetResponse;
     }
 
-    const url = publicUrl(request);
+    const canonicalUrl = publicUrl(request);
 
     return new HTMLRewriter()
-      .on('link[rel="canonical"]', new SetAttribute("href", url))
-      .on('meta[property="og:url"]', new SetAttribute("content", url))
+      .on('link[rel="canonical"]', new SetAttribute("href", canonicalUrl))
+      .on('meta[property="og:url"]', new SetAttribute("content", canonicalUrl))
       .transform(assetResponse);
   },
 };
