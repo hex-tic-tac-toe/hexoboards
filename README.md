@@ -9,21 +9,21 @@ Cloudflare Workers/Wrangler app for **hexoboards.com** with a Vercel proxy layer
 - Worker entrypoint in `src/index.js`
 - Wrangler config in `wrangler.jsonc`
 - GitHub Actions deploy workflow in `.github/workflows/deploy.yml`
-- Vercel reverse-proxy config in `vercel.json`
+- Vercel proxy project in `vercel-proxy/`
 
 ## Runtime layout
 
 - Cloudflare production worker: `https://hexoboards.mteam88.workers.dev`
 - Cloudflare staging worker: `https://hexoboards-staging.mteam88.workers.dev`
-- Intended public production URL: `https://hexoboards.com`
-- Intended public staging URL: `https://staging.hexoboards.com`
+- Public production URL: `https://hexoboards.com`
+- Public staging URL: `https://staging.hexoboards.com`
 
-The worker rewrites canonical and `og:url` metadata using forwarded host/proto headers so it can sit cleanly behind a Vercel proxy.
+The Cloudflare worker rewrites canonical and `og:url` metadata using forwarded host/proto headers. The Vercel proxy forwards requests to the correct Cloudflare worker based on the incoming hostname.
 
 ## Branch deploys
 
-- `main` deploys the production Worker
-- `staging` deploys the staging Worker
+- `main` deploys the production Cloudflare Worker
+- `staging` deploys the staging Cloudflare Worker
 
 ## Local development
 
@@ -54,13 +54,8 @@ GitHub Actions expects these repository secrets:
 - Workers static assets via `assets.directory`
 - `not_found_handling: "404-page"`
 - `observability.enabled: true`
-- Vercel host-based reverse proxy config for `hexoboards.com` and `staging.hexoboards.com`
+- Vercel proxy project in front of Cloudflare while DNS remains on Vercel
 
-## Remaining platform step
+## Remaining repo step
 
-Because the domain is still managed on Vercel, `vercel.json` must be deployed in a Vercel project that owns:
-
-- `hexoboards.com`
-- `staging.hexoboards.com`
-
-That proxy should forward those hosts to the two Cloudflare `workers.dev` origins above.
+The Cloudflare deploy pipeline is wired up. The open PR from `staging` to `main` still needs review/merge because `main` is protected.
