@@ -1,0 +1,30 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.hexoboards.com"
+        }
+      ],
+      "destination": "https://hexoboards-staging.mteam88.workers.dev/:path*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "https://hexoboards.mteam88.workers.dev/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}
