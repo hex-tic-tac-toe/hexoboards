@@ -311,7 +311,7 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
 .tree-node:hover { background:rgba(255,255,255,.08); border-color:var(--muted); color:var(--text); }
 .tree-node.current { color:var(--accent); font-weight:bold; background:rgba(255,255,255,.05); border-color:var(--accent); }
 .tree-node.fork { border-style:dashed; border-color:var(--accent); }
-.tree-node.child-of-fork { border-left:3px solid var(--accent); }
+.tree-node.child-of-fork { margin-top: 6%; border-left:3px solid var(--accent); }
 .tree-node-content { font-weight:bold; }
 .tree-node-coords { color:var(--dim); font-size:10px; margin-left:auto; }
 .tree-node .tree-delete { opacity:0; color:var(--dim); font-size:12px; cursor:pointer; }
