@@ -1,9 +1,9 @@
-import { Doc }           from '/strategies/js/modules/Doc.js';
-import { Store }         from '/strategies/js/modules/Store.js';
-import { Markdown }      from '/strategies/js/modules/Markdown.js';
-import { URLCodec }      from '/strategies/js/modules/URLCodec.js';
-import { BoardRenderer } from '/strategies/js/modules/BoardRenderer.js';
-import { HexGrid }       from '/strategies/js/modules/HexGrid.js';
+import { Doc }           from './Doc.js';
+import { Store }         from './Store.js';
+import { Markdown }      from './Markdown.js';
+import { URLCodec }      from './URLCodec.js';
+import { BoardRenderer } from './BoardRenderer.js';
+import { HexGrid }       from './HexGrid.js';
 
 const Browser = {
   activeLibId:   null,
