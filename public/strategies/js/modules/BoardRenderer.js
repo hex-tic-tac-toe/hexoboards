@@ -1,5 +1,5 @@
-import { HexGrid }   from '/strategies/js/modules/HexGrid.js';
-import { HexLayout } from '/strategies/js/modules/HexLayout.js';
+import { HexGrid }   from './HexGrid.js';
+import { HexLayout } from './HexLayout.js';
 
 const BoardRenderer = {
   _colors() {
@@ -16,6 +16,7 @@ const BoardRenderer = {
       labelX:  v('--hex-label-x') || '#1a1a1a',
       labelO:  v('--hex-label-o') || '#a0a0a0',
       hover:   v('--hex-hover')   || '#262626',
+      accent:  v('--accent')       || '#999',
     };
   },
 
@@ -24,29 +25,39 @@ const BoardRenderer = {
     const ns      = 'http://www.w3.org/2000/svg';
     const w       = opts.w ?? svgEl.parentElement.getBoundingClientRect().width;
     const h       = opts.h ?? svgEl.parentElement.getBoundingClientRect().height;
-    const R       = HexLayout.fitRadius(grid.s, w, h, opts.margin ?? 22);
+    const margin  = opts.margin ?? 80;
+    const zoom    = opts.zoom || 1;
+    const offset  = opts.offset || { x: 0, y: 0 };
+    const R       = grid.baseR ?? HexLayout.fitRadius(grid.s, w, h, margin);
     const hatchId = 'ho' + Math.random().toString(36).slice(2, 7);
     const colors  = BoardRenderer._colors();
     svgEl._hatchId = hatchId;
     svgEl._colors  = colors;
+    svgEl._baseR   = R;
+    svgEl._w       = w;
+    svgEl._h       = h;
+    svgEl._margin  = margin;
     BoardRenderer._defs(svgEl, ns, R, hatchId, colors);
 
-    let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
-    for (const c of grid.cells.values()) {
-      const {x,y} = HexLayout.axialToPixel(c.q, c.r, R), hw = R * Math.sqrt(3) / 2;
-      if (x-hw<minX) minX=x-hw; if (x+hw>maxX) maxX=x+hw;
-      if (y-R <minY) minY=y-R;  if (y+R >maxY) maxY=y+R;
-    }
-    const pad=R*0.28, vw=maxX-minX+pad*2, vh=maxY-minY+pad*2, ox=-minX+pad, oy=-minY+pad;
-    svgEl.setAttribute('viewBox', `0 0 ${vw.toFixed(1)} ${vh.toFixed(1)}`);
-    if (opts.mini) { svgEl.setAttribute('width','100%'); svgEl.setAttribute('height','100%'); }
-    else { svgEl.setAttribute('width',vw.toFixed(1)); svgEl.setAttribute('height',vh.toFixed(1)); }
+    const centerX = w / 2;
+    const centerY = h / 2;
+    
+    svgEl.setAttribute('viewBox', `0 0 ${w.toFixed(1)} ${h.toFixed(1)}`);
+    svgEl.setAttribute('width', w.toFixed(1));
+    svgEl.setAttribute('height', h.toFixed(1));
     svgEl._R = R;
+
+    const g = document.createElementNS(ns, 'g');
+    const transform = `translate(${centerX + offset.x}, ${centerY + offset.y}) scale(${zoom})`;
+    g.setAttribute('transform', transform);
+    svgEl.appendChild(g);
 
     const lmap = BoardRenderer._labelMap(labels);
     for (const c of grid.cells.values()) {
       const {x,y} = HexLayout.axialToPixel(c.q, c.r, R);
-      BoardRenderer._cell(svgEl, ns, c, x+ox, y+oy, R, lmap[HexGrid.key(c.q,c.r)]??null, opts.hover!==false, hatchId, colors);
+      const isLegal = c.legal === true && c.state === 0;
+      const cellEl = BoardRenderer._createCell(ns, c, x, y, R, lmap[HexGrid.key(c.q,c.r)]??null, opts.hover!==false, hatchId, colors, isLegal);
+      g.appendChild(cellEl);
     }
   },
 
@@ -75,12 +86,14 @@ const BoardRenderer = {
     return map;
   },
 
-  _cell(svgEl, ns, cell, cx, cy, R, label, hover, hatchId, colors) {
+  _createCell(ns, cell, cx, cy, R, label, hover, hatchId, colors, isLegal) {
     const g=document.createElementNS(ns,'g');
     g.dataset.q=cell.q; g.dataset.r=cell.r; g.dataset.cx=cx.toFixed(2); g.dataset.cy=cy.toFixed(2);
+    g.classList.add('cell-group');
     const face=document.createElementNS(ns,'path');
     face.setAttribute('d', HexLayout.hexPath(cx,cy,R,Math.max(1,R*0.09)));
-    face.classList.add('cell-face'); BoardRenderer._fill(face, cell.state, hatchId, colors); g.appendChild(face);
+    face.classList.add('cell-face'); 
+    BoardRenderer._fill(face, cell.state, hatchId, colors, isLegal); g.appendChild(face);
     if (label) {
       const t=document.createElementNS(ns,'text');
       t.setAttribute('x',cx.toFixed(2)); t.setAttribute('y',cy.toFixed(2));
@@ -95,17 +108,21 @@ const BoardRenderer = {
     }
     if (hover) {
       g.addEventListener('mouseenter',()=>{ if(!cell.state) face.setAttribute('fill', colors.hover); });
-      g.addEventListener('mouseleave',()=>BoardRenderer._fill(face, cell.state, hatchId, colors));
+      g.addEventListener('mouseleave',()=>BoardRenderer._fill(face, cell.state, hatchId, colors, isLegal));
     }
-    svgEl.appendChild(g);
+    return g;
   },
 
-  _fill(face, s, hatchId, colors) {
+  _fill(face, s, hatchId, colors, legal) {
     const h = hatchId || face.closest?.('svg')?._hatchId || 'hatch-o';
     const c = colors  || face.closest?.('svg')?._colors  || BoardRenderer._colors();
-    if      (!s)    { face.setAttribute('fill', c.empty);         face.setAttribute('stroke', c.stroke); face.setAttribute('stroke-width','0.9'); }
-    else if (s===1) { face.setAttribute('fill', c.x);             face.setAttribute('stroke','none'); }
-    else            { face.setAttribute('fill', `url(#${h})`);    face.setAttribute('stroke', c.oStroke); face.setAttribute('stroke-width','1'); }
+    if (!s) { 
+      face.setAttribute('fill', c.empty);
+      face.setAttribute('stroke', c.stroke);
+      face.setAttribute('stroke-width', '0.5');
+    }
+    else if (s===1) { face.setAttribute('fill', c.x); face.setAttribute('stroke', c.stroke); face.setAttribute('stroke-width', '0.5'); }
+    else { face.setAttribute('fill', `url(#${h})`); face.setAttribute('stroke', c.stroke); face.setAttribute('stroke-width', '0.5'); }
   },
 
   updateCell(svgEl, q, r, state) {

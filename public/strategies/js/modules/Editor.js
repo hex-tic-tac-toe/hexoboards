@@ -1,7 +1,7 @@
-import { HexGrid }       from '/strategies/js/modules/HexGrid.js';
-import { BoardRenderer } from '/strategies/js/modules/BoardRenderer.js';
-import { URLCodec }      from '/strategies/js/modules/URLCodec.js';
-import { Layout }        from '/strategies/js/modules/Layout.js';
+import { HexGrid }       from './HexGrid.js';
+import { BoardRenderer } from './BoardRenderer.js';
+import { URLCodec }      from './URLCodec.js';
+import { Layout }        from './Layout.js';
 
 const Editor = {
   grid:          null,

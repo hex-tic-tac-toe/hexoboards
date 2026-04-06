@@ -1,4 +1,4 @@
-import { Doc } from '/strategies/js/modules/Doc.js';
+import { Doc } from './Doc.js';
 
 const Store = {
   LOCAL:       'local',

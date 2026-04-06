@@ -1,7 +1,7 @@
-import { Store }   from '/strategies/js/modules/Store.js';
-import { Browser } from '/strategies/js/modules/Browser.js';
-import { Doc }     from '/strategies/js/modules/Doc.js';
-import { UI }      from '/strategies/js/modules/UI.js';
+import { Store }   from './Store.js';
+import { Browser } from './Browser.js';
+import { Doc }     from './Doc.js';
+import { UI }      from './UI.js';
 
 const LibManager = {
   _toast: null,

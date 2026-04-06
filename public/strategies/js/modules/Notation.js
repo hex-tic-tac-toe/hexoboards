@@ -1,5 +1,5 @@
-import { HexGrid } from '/strategies/js/modules/HexGrid.js';
-import { HTN }     from '/strategies/js/modules/HTN.js';
+import { HexGrid } from './HexGrid.js';
+import { HTN }     from './HTN.js';
 
 const Notation = {
   _dist: (q, r) => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2,

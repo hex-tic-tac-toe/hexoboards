@@ -1,14 +1,15 @@
-import { HexGrid }    from '/strategies/js/modules/HexGrid.js';
-import { Store }      from '/strategies/js/modules/Store.js';
-import { Doc }        from '/strategies/js/modules/Doc.js';
-import { Editor }     from '/strategies/js/modules/Editor.js';
-import { Browser }    from '/strategies/js/modules/Browser.js';
-import { LibManager } from '/strategies/js/modules/LibManager.js';
-import { URLCodec }   from '/strategies/js/modules/URLCodec.js';
-import { Notation }   from '/strategies/js/modules/Notation.js';
-import { UI }         from '/strategies/js/modules/UI.js';
-import { HTN }        from '/strategies/js/modules/HTN.js';
-import { Layout }     from '/strategies/js/modules/Layout.js';
+import { HexGrid }    from './HexGrid.js';
+import { Store }      from './Store.js';
+import { Doc }        from './Doc.js';
+import { Editor }     from './Editor.js';
+import { Analyzer }   from './Analyzer.js';
+import { Browser }    from './Browser.js';
+import { LibManager } from './LibManager.js';
+import { URLCodec }   from './URLCodec.js';
+import { Notation }   from './Notation.js';
+import { UI }         from './UI.js';
+import { HTN }        from './HTN.js';
+import { Layout }     from './Layout.js';
 
 const App = {
   async init() {
@@ -18,7 +19,7 @@ const App = {
     LibManager.init(App._toast);
 
     const hash = window.location.hash.slice(1);
-    const boardNav = !hash.startsWith('b/') && hash !== 'd' && hash !== 'c' && hash;
+    const boardNav = !hash.startsWith('b/') && hash !== 'd' && hash !== 'c' && hash !== 'a' && hash;
     if (boardNav) {
       const decoded = URLCodec.decodeFull(boardNav);
       if (decoded) {
@@ -37,6 +38,9 @@ const App = {
     App._initCompact();
     UI.init(() => Editor._buildBoard());
 
+    Analyzer._load();
+    Analyzer.init();
+
     await Store.fetchDefaults();
     await Store.fetchAllActive();
     Browser._renderNav();
@@ -54,6 +58,8 @@ const App = {
       UI.showData(() => LibManager.render());
     } else if (hash === 'c') {
       UI.showConvert(() => {});
+    } else if (hash === 'a') {
+      UI.showAnalyze(() => Analyzer._buildBoard());
     } else {
       UI.showEditor(() => Editor._buildBoard());
     }
@@ -211,13 +217,15 @@ const App = {
       btn.classList.toggle('active', Editor.labelMode === 'number');
     });
 
-    for (const id of ['tab-editor','tab-editor-b','tab-editor-d','tab-editor-c'])
+    for (const id of ['tab-editor','tab-editor-b','tab-editor-d','tab-editor-c','tab-editor-a'])
       document.getElementById(id).addEventListener('click', () => UI.showEditor(() => Editor._buildBoard()));
-    for (const id of ['tab-browser','tab-browser-b','tab-browser-d','tab-browser-c'])
+    for (const id of ['tab-analyze','tab-analyze-b','tab-analyze-d','tab-analyze-c','tab-analyze-a'])
+      document.getElementById(id).addEventListener('click', () => UI.showAnalyze(() => Analyzer._buildBoard()));
+    for (const id of ['tab-browser','tab-browser-b','tab-browser-d','tab-browser-c','tab-browser-a'])
       document.getElementById(id).addEventListener('click', () => UI.showBrowser(() => Browser.render(Browser.activeLibId || Store.LOCAL)));
-    for (const id of ['tab-data','tab-data-b','tab-data-d','tab-data-c'])
+    for (const id of ['tab-data','tab-data-b','tab-data-d','tab-data-c','tab-data-a'])
       document.getElementById(id).addEventListener('click', () => UI.showData(() => LibManager.render()));
-    for (const id of ['tab-convert','tab-convert-b','tab-convert-d','tab-convert-c'])
+    for (const id of ['tab-convert','tab-convert-b','tab-convert-d','tab-convert-c','tab-convert-a'])
       document.getElementById(id).addEventListener('click', () => UI.showConvert(() => {}));
 
     document.getElementById('btn-lib-add').addEventListener('click', async () => {
@@ -254,7 +262,7 @@ const App = {
     document.getElementById('btn-compact')?.addEventListener('click',       () => App._toggleCompact());
     document.getElementById('btn-back-to-top')?.addEventListener('click',   () => { document.getElementById('browser-main').scrollTo({ top: 0, behavior: 'smooth' }); });
 
-    document.querySelectorAll('.btn-theme').forEach(b => b.addEventListener('click', () => App._cycleTheme()));
+    document.querySelectorAll('.btn-theme').forEach(b => b.addEventListener('click', () => App._toast('dark only')));
 
     document.getElementById('browser-main')?.addEventListener('scroll', e => {
       const btn = document.getElementById('btn-back-to-top');
@@ -263,7 +271,11 @@ const App = {
 
     document.addEventListener('keydown', e => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); App._save(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); Editor.undo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { 
+        e.preventDefault(); 
+        if (UI.activeView === 'analyze') Analyzer.undo();
+        else Editor.undo(); 
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
         if (UI.activeView !== 'browser') UI.showBrowser(() => Browser.render(Browser.activeLibId || Store.LOCAL));
@@ -271,12 +283,9 @@ const App = {
       }
     });
 
-    document.getElementById('htn-text')?.addEventListener('keydown', e => { if ((e.ctrlKey||e.metaKey) && e.key==='Enter') App._loadHtn(); });
-    document.getElementById('btn-htn-load')?.addEventListener('click', () => App._loadHtn());
-
     window.addEventListener('hashchange', () => {
       const h = window.location.hash.slice(1);
-      if (!h || (!h.startsWith('b/') && h !== 'd' && h !== 'c')) {
+      if (!h || (!h.startsWith('b/') && h !== 'd' && h !== 'c' && h !== 'a')) {
         const d = URLCodec.decodeFull(h); if (!d) return;
         Editor.grid = d.grid; Editor.labels = d.labels; Editor.history = []; Editor.nodeId = null;
         document.getElementById('input-size').value = d.grid.s;
@@ -328,25 +337,8 @@ const App = {
   },
 
   _initTheme() {
-    const saved = localStorage.getItem('hexstrat-theme') || 'system';
-    App._applyTheme(saved);
-  },
-
-  _cycleTheme() {
-    const current = localStorage.getItem('hexstrat-theme') || 'system';
-    const next = { dark: 'light', light: 'system', system: 'dark' }[current] || 'dark';
-    localStorage.setItem('hexstrat-theme', next);
-    App._applyTheme(next);
-  },
-
-  _applyTheme(theme) {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const useDark = theme === 'dark' || (theme === 'system' && prefersDark);
-    document.documentElement.classList.toggle('light', !useDark);
-    const icons = { dark: '☾', light: '☀', system: '◑' };
-    document.querySelectorAll('.btn-theme').forEach(b => b.textContent = icons[theme] || '◑');
-    if (UI.activeView === 'editor' && Editor.grid) Editor._buildBoard();
-    else if (UI.activeView === 'browser' && Browser.activeLibId) Browser.render(Browser.activeLibId, true);
+    document.documentElement.classList.remove('light');
+    document.querySelectorAll('.btn-theme').forEach(b => b.textContent = '☾');
   },
 
   _initCompact() {
@@ -360,23 +352,6 @@ const App = {
     const active = main.classList.toggle('browser-compact');
     localStorage.setItem('hexstrat-compact', active ? '1' : '');
     document.getElementById('btn-compact').classList.toggle('active', active);
-  },
-
-  _loadHtn() {
-    const src  = document.getElementById('htn-text').value.trim(); if (!src) { App._toast('paste HTN first'); return; }
-    const turn = parseInt(document.getElementById('htn-turn').value, 10) || Infinity;
-    try {
-      const { metadata, turns } = HTN.parse(src);
-      const v = HTN.validate(turns); if (!v.ok) { App._toast(`invalid turn ${v.turn}: ${v.reason}`); return; }
-      const grid = HTN.buildGrid(turns, turn);
-      Editor.grid = grid; Editor.history = []; Editor.labels = []; Editor.nodeId = null;
-      Editor.note = metadata.name ? `Game: ${metadata.name}` : ''; Editor.title = metadata.name || '';
-      Editor.noteOpen = Editor.note.length > 0;
-      document.getElementById('input-size').value = grid.s;
-      Editor._syncPanels(); Editor._syncFooter(); Editor._syncMode();
-      UI.showEditor(() => Editor._buildBoard());
-      App._toast('loaded from HTN');
-    } catch (err) { App._toast('parse error: ' + err.message); }
   },
 
   _copy(text) {

@@ -1,5 +1,5 @@
-import { HexGrid }   from '/strategies/js/modules/HexGrid.js';
-import { HexLayout } from '/strategies/js/modules/HexLayout.js';
+import { HexGrid }   from './HexGrid.js';
+import { HexLayout } from './HexLayout.js';
 
 const URLCodec = {
   encode(grid) {
