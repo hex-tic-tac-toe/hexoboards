@@ -245,7 +245,7 @@ const Share = {
       if (id) return { service: svc.name, id, tab: defaultTab };
     }
     
-    // Check if the whole thing looks like an ID (hex string 20+ chars for gist)
+    // Check if the whole thing looks like a gist ID (hex string 20+ chars)
     if (/^[a-f0-9]{20,}$/i.test(url)) {
       return { service: 'gist', id: url, tab: defaultTab };
     }

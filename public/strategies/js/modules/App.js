@@ -155,7 +155,11 @@ const App = {
 
   /** Load fetched data into the appropriate tab. Used by remote hash and share modal import. */
   _loadImportedData(tab, data) {
-    if (tab === 'editor' && (data.type === 'hexoboards-board' || data.board)) {
+    if (tab === 'library' && data.type === 'hexoboards-library') {
+      Store.saveDoc(Store.LOCAL, data.doc || []);
+      UI.showBrowser(() => Browser.render(Store.LOCAL));
+      App._toast('library loaded');
+    } else if (tab === 'editor' && (data.type === 'hexoboards-board' || data.board)) {
       const grid = URLCodec.decode(data.board);
       if (grid) { Editor.loadGrid(grid); UI.showEditor(() => Editor._buildBoard()); App._toast('board loaded'); }
     } else if (tab === 'match') {
@@ -182,6 +186,15 @@ const App = {
         App._toast('match loaded');
       } else { App._toast('unrecognised format'); }
     } else { App._toast('unrecognised format'); }
+  },
+
+  /** Load an imported library. */
+  _loadImportedLibrary(data) {
+    if (data.type === 'hexoboards-library' && Array.isArray(data.doc)) {
+      Store.saveDoc(Store.LOCAL, data.doc);
+      UI.showBrowser(() => Browser.render(Store.LOCAL));
+      App._toast('library imported');
+    } else { App._toast('unrecognised library format'); }
   },
 
   // ── notation panel ────────────────────────────────────────────────────────
@@ -356,12 +369,22 @@ const App = {
     document.getElementById('btn-share-match')?.addEventListener('click', () => {
       Share.showModal(
         'match',
-        // Compact export: wrap hextic notation so the recipient can import it
         () => JSON.stringify({ type:'hexoboards-match-compact', notation: Match.toHextic(),
           title: Match.title, note: Match.note }, null, 2),
         'Match',
         App._toast,
         (tab, data) => App._loadImportedData(tab, data)
+      );
+    });
+    document.getElementById('btn-share-library')?.addEventListener('click', () => {
+      const libId = Browser.activeLibId || Store.LOCAL;
+      const docObj = Store.getDoc(libId);
+      Share.showModal(
+        'library',
+        () => JSON.stringify({ type:'hexoboards-library', doc: docObj?.doc || [] }, null, 2),
+        'Library',
+        App._toast,
+        (tab, data) => App._loadImportedLibrary(data)
       );
     });
 
@@ -400,12 +423,12 @@ const App = {
       } else { App._toast('invalid notation'); }
     });
     document.getElementById('btn-match-import-url').addEventListener('click', async () => {
-      const url = document.getElementById('match-import-ta')?.value.trim();
-      if (!url) return;
+      const input = document.getElementById('match-import-ta')?.value.trim();
+      if (!input) return;
       const statusEl = document.getElementById('match-import-status');
       if (statusEl) statusEl.textContent = 'fetching…';
       try {
-        const remote = Share.parseRemoteFromAnyUrl(url, 'match');
+        const remote = Share.parseRemoteFromAnyUrl(input, 'match');
         if (!remote) { if (statusEl) statusEl.textContent = 'unrecognised URL'; return; }
         const text = await Share.fetchRemote(remote.service, remote.id);
         App._loadImportedData(remote.tab, JSON.parse(text));
