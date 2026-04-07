@@ -712,7 +712,7 @@ const Match = {
       close();
       // Restore turn indicator (might still say "thinking…" from bot)
       const turnEl = document.getElementById('match-turn');
-      if (turnEl) turnEl.textContent = "X's turn";  // match continues; X always plays next (new branch)
+      if (turnEl) turnEl.textContent = 'X\'s turn';  // match continues; X always plays next (new branch)
     });
     btn('new game', () => { close(); Match.clear(); });
 

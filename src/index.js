@@ -1,7 +1,7 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject } from 'cloudflare:workers';
 
-const SHARE_TABS = new Set(["editor", "match", "library"]);
-const SHARE_ID_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const SHARE_TABS = new Set(['editor', 'match', 'library']);
+const SHARE_ID_ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SHARE_ID_LENGTH = 12;
 const MAX_SHARE_BYTES = 200_000;
 
@@ -10,7 +10,7 @@ function normalizeForwardedHost(value) {
     return null;
   }
 
-  const first = value.split(",")[0].trim();
+  const first = value.split(',')[0].trim();
   if (!first) {
     return null;
   }
@@ -18,19 +18,19 @@ function normalizeForwardedHost(value) {
   try {
     return new URL(`http://${first}`).hostname;
   } catch {
-    return first.replace(/:\d+$/, "");
+    return first.replace(/:\d+$/, '');
   }
 }
 
 function publicRequestUrl(request) {
   const requestUrl = new URL(request.url);
-  const forwardedHost = normalizeForwardedHost(request.headers.get("x-forwarded-host"));
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim();
+  const forwardedHost = normalizeForwardedHost(request.headers.get('x-forwarded-host'));
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim();
 
   const url = new URL(request.url);
   if (forwardedHost) {
     url.hostname = forwardedHost;
-    url.port = "";
+    url.port = '';
   }
   if (forwardedProto) {
     url.protocol = `${forwardedProto}:`;
@@ -38,13 +38,13 @@ function publicRequestUrl(request) {
 
   url.pathname = requestUrl.pathname;
   url.search = requestUrl.search;
-  url.hash = "";
+  url.hash = '';
   return url;
 }
 
 function publicUrl(request) {
   const url = publicRequestUrl(request);
-  url.search = "";
+  url.search = '';
   return url.toString();
 }
 
@@ -52,7 +52,7 @@ function jsonResponse(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "content-type": "application/json; charset=utf-8",
+      'content-type': 'application/json; charset=utf-8',
       ...headers,
     },
   });
@@ -63,7 +63,7 @@ function errorResponse(message, status = 400, headers = {}) {
 }
 
 function methodNotAllowed(allow) {
-  return errorResponse("method not allowed", 405, { allow: allow.join(", ") });
+  return errorResponse('method not allowed', 405, { allow: allow.join(', ') });
 }
 
 function isValidTab(tab) {
@@ -77,12 +77,12 @@ function parseSharePath(pathname) {
 
 function parseApiSharePath(pathname) {
   const match = pathname.match(/^\/api\/shares\/([A-Za-z0-9_-]{6,64})(?:\/(meta))?\/?$/);
-  return match ? { id: match[1], meta: match[2] === "meta" } : null;
+  return match ? { id: match[1], meta: match[2] === 'meta' } : null;
 }
 
 function randomShareId(length = SHARE_ID_LENGTH) {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
-  let id = "";
+  let id = '';
   for (let i = 0; i < length; i += 1) {
     id += SHARE_ID_ALPHABET[bytes[i] % SHARE_ID_ALPHABET.length];
   }
@@ -100,15 +100,15 @@ async function parseJson(request) {
 function shareUrl(request, id, tab) {
   const url = publicRequestUrl(request);
   url.pathname = `/share/${tab}/${id}`;
-  url.search = "";
-  url.hash = "";
+  url.search = '';
+  url.hash = '';
   return url.toString();
 }
 
 function shareAppHashUrl(request, id, tab) {
   const url = publicRequestUrl(request);
-  url.pathname = "/";
-  url.search = "";
+  url.pathname = '/';
+  url.search = '';
   url.hash = `remote/cf/${id}/${tab}`;
   return url.toString();
 }
@@ -122,28 +122,28 @@ async function createShare(request, env) {
   const content = body?.content;
   const tab = body?.tab;
 
-  if (typeof content !== "string" || !content.trim()) {
-    return errorResponse("content must be a non-empty JSON string");
+  if (typeof content !== 'string' || !content.trim()) {
+    return errorResponse('content must be a non-empty JSON string');
   }
   if (content.length > MAX_SHARE_BYTES) {
     return errorResponse(`content exceeds ${MAX_SHARE_BYTES} bytes`, 413);
   }
   if (!isValidTab(tab)) {
-    return errorResponse("tab must be editor, match, or library");
+    return errorResponse('tab must be editor, match, or library');
   }
 
   try {
     JSON.parse(content);
   } catch {
-    return errorResponse("content must be valid JSON");
+    return errorResponse('content must be valid JSON');
   }
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const id = randomShareId();
     const stub = shareStub(env, id);
-    const response = await stub.fetch("https://share.internal/create", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
+    const response = await stub.fetch('https://share.internal/create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ id, tab, content }),
     });
 
@@ -165,11 +165,11 @@ async function createShare(request, env) {
         remoteUrl: shareAppHashUrl(request, created.id, created.tab),
       },
       201,
-      { "cache-control": "no-store" },
+      { 'cache-control': 'no-store' },
     );
   }
 
-  return errorResponse("failed to allocate share id", 500);
+  return errorResponse('failed to allocate share id', 500);
 }
 
 class SetAttribute {
@@ -192,27 +192,27 @@ export class GameShare extends DurableObject {
   async fetch(request) {
     const url = new URL(request.url);
 
-    if (request.method === "POST" && url.pathname === "/create") {
+    if (request.method === 'POST' && url.pathname === '/create') {
       return this.create(request);
     }
-    if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/content") {
+    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/content') {
       return this.content();
     }
-    if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/meta") {
+    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/meta') {
       return this.meta();
     }
 
-    return errorResponse("not found", 404);
+    return errorResponse('not found', 404);
   }
 
   async loadShare() {
-    return this.ctx.storage.get("share");
+    return this.ctx.storage.get('share');
   }
 
   async create(request) {
     const existing = await this.loadShare();
     if (existing) {
-      return errorResponse("share id already exists", 409);
+      return errorResponse('share id already exists', 409);
     }
 
     const body = await parseJson(request);
@@ -220,19 +220,19 @@ export class GameShare extends DurableObject {
     const tab = body?.tab;
     const content = body?.content;
 
-    if (typeof id !== "string" || !id) {
-      return errorResponse("id required");
+    if (typeof id !== 'string' || !id) {
+      return errorResponse('id required');
     }
     if (!isValidTab(tab)) {
-      return errorResponse("invalid tab");
+      return errorResponse('invalid tab');
     }
-    if (typeof content !== "string" || !content.trim()) {
-      return errorResponse("content required");
+    if (typeof content !== 'string' || !content.trim()) {
+      return errorResponse('content required');
     }
 
     const now = Date.now();
     const share = { id, tab, content, createdAt: now, updatedAt: now };
-    await this.ctx.storage.put("share", share);
+    await this.ctx.storage.put('share', share);
 
     return jsonResponse(
       {
@@ -242,22 +242,22 @@ export class GameShare extends DurableObject {
         updatedAt: share.updatedAt,
       },
       201,
-      { "cache-control": "no-store" },
+      { 'cache-control': 'no-store' },
     );
   }
 
   async content() {
     const share = await this.loadShare();
     if (!share) {
-      return errorResponse("not found", 404);
+      return errorResponse('not found', 404);
     }
 
     return new Response(share.content, {
       headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "public, max-age=31536000, immutable",
-        "x-hexoboards-share-id": share.id,
-        "x-hexoboards-tab": share.tab,
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'public, max-age=31536000, immutable',
+        'x-hexoboards-share-id': share.id,
+        'x-hexoboards-tab': share.tab,
       },
     });
   }
@@ -265,7 +265,7 @@ export class GameShare extends DurableObject {
   async meta() {
     const share = await this.loadShare();
     if (!share) {
-      return errorResponse("not found", 404);
+      return errorResponse('not found', 404);
     }
 
     return jsonResponse(
@@ -276,7 +276,7 @@ export class GameShare extends DurableObject {
         updatedAt: share.updatedAt,
       },
       200,
-      { "cache-control": "public, max-age=31536000, immutable" },
+      { 'cache-control': 'public, max-age=31536000, immutable' },
     );
   }
 }
@@ -285,47 +285,47 @@ export default {
   async fetch(request, env) {
     const url = publicRequestUrl(request);
 
-    if (["/strategies", "/strategies/", "/posts", "/posts/"].includes(url.pathname)) {
-      url.pathname = "/";
-      url.search = "";
+    if (['/strategies', '/strategies/', '/posts', '/posts/'].includes(url.pathname)) {
+      url.pathname = '/';
+      url.search = '';
       return Response.redirect(url.toString(), 308);
     }
 
-    if (url.pathname === "/api/shares") {
-      if (request.method !== "POST") {
-        return methodNotAllowed(["POST"]);
+    if (url.pathname === '/api/shares') {
+      if (request.method !== 'POST') {
+        return methodNotAllowed(['POST']);
       }
       return createShare(request, env);
     }
 
     const apiShare = parseApiSharePath(url.pathname);
     if (apiShare) {
-      if (!["GET", "HEAD"].includes(request.method)) {
-        return methodNotAllowed(["GET", "HEAD"]);
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        return methodNotAllowed(['GET', 'HEAD']);
       }
-      return shareStub(env, apiShare.id).fetch(`https://share.internal/${apiShare.meta ? "meta" : "content"}`);
+      return shareStub(env, apiShare.id).fetch(`https://share.internal/${apiShare.meta ? 'meta' : 'content'}`);
     }
 
     const share = parseSharePath(url.pathname);
     if (share) {
-      if (!["GET", "HEAD"].includes(request.method)) {
-        return methodNotAllowed(["GET", "HEAD"]);
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        return methodNotAllowed(['GET', 'HEAD']);
       }
       return Response.redirect(shareAppHashUrl(request, share.id, share.tab), 302);
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
-    const contentType = assetResponse.headers.get("content-type") || "";
+    const contentType = assetResponse.headers.get('content-type') || '';
 
-    if (!contentType.includes("text/html")) {
+    if (!contentType.includes('text/html')) {
       return assetResponse;
     }
 
     const canonicalUrl = publicUrl(request);
 
     return new HTMLRewriter()
-      .on('link[rel="canonical"]', new SetAttribute("href", canonicalUrl))
-      .on('meta[property="og:url"]', new SetAttribute("content", canonicalUrl))
+      .on('link[rel="canonical"]', new SetAttribute('href', canonicalUrl))
+      .on('meta[property="og:url"]', new SetAttribute('content', canonicalUrl))
       .transform(assetResponse);
   },
 };

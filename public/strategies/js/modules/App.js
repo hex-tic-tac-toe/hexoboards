@@ -97,10 +97,8 @@ const App = {
       App._toast('loading…');
       try {
         const text = await Share.fetchRemote('cf', id);
-        console.log('Fetched share data, loading...');
         App._loadImportedData(tab, JSON.parse(text));
         _shareLoaded = true;
-        console.log('Share load complete, replacing state');
         history.replaceState(null, '', location.pathname);
       } catch (e) { App._toast('failed: ' + e.message); }
     } else if (hash.startsWith('remote/')) {
@@ -146,11 +144,9 @@ const App = {
     await Store.fetchDefaults();
     await Store.fetchAllActive();
     Browser._renderNav();
-    console.log('Routing: _shareTab =', _shareTab, ', hash =', hash);
 
     // Route to view
     if (_shareTab) {
-      console.log('Showing correct tab:', _shareTab);
       if (_shareTab === 'editor') UI.showEditor(() => Editor._buildBoard());
       else if (_shareTab === 'match') UI.showMatch(() => { if (!Match._boardActive) Match._showStartModal(); Match._buildBoard(); });
       else if (_shareTab === 'library') UI.showBrowser(() => Browser.render(Store.LOCAL));
@@ -174,13 +170,11 @@ const App = {
   // ── remote hash: fetch from paste service and reconstruct ──────────────────
 
   async _handleRemoteHash(hash) {
-    console.log('_handleRemoteHash called with:', hash);
     const remote = Share.parseRemoteHash(hash);
     if (!remote) { App._toast('invalid link'); return; }
     App._toast('loading…');
     try {
       const text = await Share.fetchRemote(remote.service, remote.id);
-      console.log('Remote fetch complete, loading tab:', remote.tab);
       App._loadImportedData(remote.tab, JSON.parse(text));
     } catch (e) { App._toast('failed: ' + e.message); }
   },
