@@ -895,7 +895,7 @@ const Match = {
 
   _save() {
     try {
-      localStorage.setItem(Store._K.match, JSON.stringify({
+      localStorage.setItem(Store.STORAGE_KEYS.match, JSON.stringify({
         tree:      Match._serialize(Match.tree),
         viewOffset:Match.viewOffset, viewZoom:Match.viewZoom,
         collapsed: Array.from(Match._collapsedChildren),
@@ -909,7 +909,7 @@ const Match = {
 
   _load() {
     try {
-      const raw = localStorage.getItem(Store._K.match);
+      const raw = localStorage.getItem(Store.STORAGE_KEYS.match);
       if (raw) {
         const data = JSON.parse(raw);
         MatchNode.resetId();

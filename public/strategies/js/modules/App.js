@@ -91,7 +91,7 @@ const App = {
     const shareMatch = location.pathname.match(/^\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)\/?$/);
     if (shareMatch) {
       _shareTab = shareMatch[1];
-      localStorage.removeItem(Store._K.editor);
+      localStorage.removeItem(Store.STORAGE_KEYS.editor);
       const tab = _shareTab;
       const id = shareMatch[2];
       App._toast('loading…');
@@ -605,8 +605,8 @@ const App = {
   // ── compact / theme ───────────────────────────────────────────────────────
 
   _initTheme()   { document.documentElement.classList.remove('light'); document.querySelectorAll('.btn-theme').forEach(b=>b.textContent='☾'); },
-  _initCompact() { const c=localStorage.getItem(Store._K.compact)==='1'; document.getElementById('browser-main')?.classList.toggle('browser-compact',c); document.getElementById('btn-compact')?.classList.toggle('active',c); },
-  _toggleCompact() { const m=document.getElementById('browser-main'), a=m.classList.toggle('browser-compact'); localStorage.setItem(Store._K.compact,a?'1':''); document.getElementById('btn-compact').classList.toggle('active',a); },
+  _initCompact() { const c=localStorage.getItem(Store.STORAGE_KEYS.compact)==='1'; document.getElementById('browser-main')?.classList.toggle('browser-compact',c); document.getElementById('btn-compact')?.classList.toggle('active',c); },
+  _toggleCompact() { const m=document.getElementById('browser-main'), a=m.classList.toggle('browser-compact'); localStorage.setItem(Store.STORAGE_KEYS.compact,a?'1':''); document.getElementById('btn-compact').classList.toggle('active',a); },
 
   // ── helpers ───────────────────────────────────────────────────────────────
 

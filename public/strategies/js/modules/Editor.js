@@ -44,7 +44,7 @@ const Editor = {
   _saveState() {
     if (!Editor.grid) return;
     try {
-      localStorage.setItem(Store._K.editor, JSON.stringify({
+      localStorage.setItem(Store.STORAGE_KEYS.editor, JSON.stringify({
         board:       URLCodec.encode(Editor.grid),
         labels:      Editor.labels.map(l => [l.q, l.r, l.mark]),
         noteOpen:    Editor.noteOpen,
@@ -60,7 +60,7 @@ const Editor = {
   /** Returns true if state was restored from localStorage. */
   _loadState() {
     try {
-      const raw = localStorage.getItem(Store._K.editor);
+      const raw = localStorage.getItem(Store.STORAGE_KEYS.editor);
       if (!raw) return false;
       const data = JSON.parse(raw);
       const grid = URLCodec.decode(data.board);

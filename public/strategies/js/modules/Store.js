@@ -14,7 +14,7 @@ const Store = {
   DEFAULT_URL: '/strategies/data/default.json',
 
   // All localStorage keys in one place
-  _K: {
+  STORAGE_KEYS: {
     libs:    'hexoboards-libs',
     docs:    'hexoboards-docs',
     compact: 'hexoboards-compact',
@@ -29,8 +29,8 @@ const Store = {
   load() {
     Store._migrateKeys();
     const get = k => { try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
-    Store.libs = get(Store._K.libs);
-    Store.docs = get(Store._K.docs);
+    Store.libs = get(Store.STORAGE_KEYS.libs);
+    Store.docs = get(Store.STORAGE_KEYS.docs);
     if (!Store.libs[Store.LOCAL]) {
       Store.libs[Store.LOCAL] = { name: 'My Positions', active: true, local: true };
       Store._saveLibs();
@@ -47,10 +47,10 @@ const Store = {
   /** Silently move old hexstrat-* keys to hexoboards-* on first run. */
   _migrateKeys() {
     const renames = [
-      ['hexstrat-libs',     Store._K.libs],
-      ['hexstrat-docs',     Store._K.docs],
-      ['hexstrat-analyzer', Store._K.match],
-      ['hexstrat-compact',  Store._K.compact],
+      ['hexstrat-libs',     Store.STORAGE_KEYS.libs],
+      ['hexstrat-docs',     Store.STORAGE_KEYS.docs],
+      ['hexstrat-analyzer', Store.STORAGE_KEYS.match],
+      ['hexstrat-compact',  Store.STORAGE_KEYS.compact],
     ];
     for (const [oldKey, newKey] of renames) {
       const raw = localStorage.getItem(oldKey);
@@ -164,15 +164,15 @@ const Store = {
   },
 
   clearAll() {
-    Object.values(Store._K).forEach(k => localStorage.removeItem(k));
+    Object.values(Store.STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
     // Also clean up any old keys that might remain
     ['hexstrat-libs','hexstrat-docs','hexstrat-local','hexstrat-order','hexstrat-analyzer','hexstrat-compact']
       .forEach(k => localStorage.removeItem(k));
     location.reload();
   },
 
-  _saveLibs() { localStorage.setItem(Store._K.libs, JSON.stringify(Store.libs)); },
-  _saveDocs()  { localStorage.setItem(Store._K.docs, JSON.stringify(Store.docs)); },
+  _saveLibs() { localStorage.setItem(Store.STORAGE_KEYS.libs, JSON.stringify(Store.libs)); },
+  _saveDocs()  { localStorage.setItem(Store.STORAGE_KEYS.docs, JSON.stringify(Store.docs)); },
 };
 
 export { Store };
