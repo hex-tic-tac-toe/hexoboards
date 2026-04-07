@@ -10,6 +10,7 @@ const Layout = {
   MATCH_PLAY_W: 220,
   MATCH_NOTE_W: 200,
   MATCH_TREE_W: 280,
+  MATCH_IMPORT_W: 320,
 
   boardW: (noteOpen, notationOpen) =>
     window.innerWidth - (noteOpen ? Layout.NOTE_W : 0) - (notationOpen ? Layout.NOTATION_W : 0),

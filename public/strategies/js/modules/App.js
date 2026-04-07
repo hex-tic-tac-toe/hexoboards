@@ -25,6 +25,7 @@ import { Source }     from './Source.js';
 import { Share }      from './Share.js';
 import { UI }         from './UI.js';
 import { Layout }     from './Layout.js';
+import { GameImport } from './GameImport.js';
 
 
 const App = {
@@ -87,6 +88,19 @@ const App = {
 
     Match._load();
     Match.init();
+
+    GameImport.init();
+    GameImport.onImport = (hextic, gameId) => {
+      if (Match.fromHextic(hextic)) {
+        Match.title = `Imported from Hexo (${gameId.slice(0, 8)})`;
+        UI.showMatch(() => { Match._renderPlayPanel(); Match._renderNotePanel(); Match._renderTree(); Match._buildBoard(); });
+        App._toast('game imported');
+        GameImport.panelOpen = false;
+        GameImport._syncPanel();
+      } else {
+        App._toast('failed to import game');
+      }
+    };
 
     const shareMatch = location.pathname.match(/^\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)\/?$/);
     if (shareMatch) {
@@ -477,6 +491,9 @@ const App = {
     // Match panel toggle buttons
     document.getElementById('match-play-toggle').addEventListener('click', () => {
       Match.playOpen = !Match.playOpen; Match._syncMatchPanels(); Match._buildBoard();
+    });
+    document.getElementById('btn-gameimport-toggle')?.addEventListener('click', () => {
+      GameImport.togglePanel();
     });
     document.getElementById('match-note-toggle').addEventListener('click', () => {
       Match.noteOpen = !Match.noteOpen; Match._syncMatchPanels(); Match._renderNotePanel(); Match._buildBoard();

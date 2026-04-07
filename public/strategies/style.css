@@ -769,3 +769,84 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
 .match-card-note  { font-size: 11px; color: var(--muted); line-height: 1.4; }
 .match-card-acts  { padding: 0 10px; display: flex; gap: 4px; opacity: 0; flex-shrink: 0; transition: opacity .1s; }
 .doc-node.match-card:hover .match-card-acts { opacity: 1; }
+
+/* ── Game Import Panel ─────────────────────────────────────────────────────── */
+#gameimport-panel {
+  position: absolute;
+  top: calc(var(--header-h) + var(--toolbar-h));
+  left: 0; right: 0;
+  max-height: 70vh;
+  background: var(--surface); border-bottom: 1px solid var(--border-hi);
+  display: none; flex-direction: column; overflow: hidden; z-index: 20;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+}
+#gameimport-content {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+}
+.gi-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.gi-title {
+  font-size: 10px; color: var(--accent); letter-spacing: .12em;
+  text-transform: uppercase; font-weight: bold;
+}
+.gi-close { padding: 2px 8px; font-size: 12px; }
+.gi-tabs {
+  display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.gi-tab { padding: 4px 10px; font-size: 9px; }
+.gi-tab.active { color: var(--accent); border-color: var(--accent-dim); }
+.gi-body { flex: 1; overflow-y: auto; padding: 8px; }
+.gi-loading, .gi-empty, .gi-error {
+  padding: 20px; text-align: center; color: var(--dim);
+  font-size: 11px; letter-spacing: .04em;
+}
+.gi-error { color: #c55; }
+.gi-game-list, .gi-session-list {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.gi-game-item, .gi-session-item {
+  padding: 8px 10px; background: var(--bg); border: 1px solid var(--border);
+  cursor: pointer; transition: border-color .1s, background .1s;
+}
+.gi-game-item:hover, .gi-session-item:hover {
+  border-color: var(--border-hi); background: rgba(255,255,255,.02);
+}
+.gi-game-players, .gi-session-players {
+  display: flex; align-items: center; gap: 6px; font-size: 11px;
+}
+.gi-player { color: var(--text); }
+.gi-player.winner { color: var(--accent); font-weight: bold; }
+.gi-vs { color: var(--dim); font-size: 9px; }
+.gi-game-meta, .gi-session-meta {
+  display: flex; gap: 8px; margin-top: 4px; font-size: 9px; color: var(--dim);
+}
+.gi-moves { color: var(--muted); }
+.gi-duration { color: var(--dim); }
+.gi-result { color: var(--dim); text-transform: capitalize; }
+.gi-game-date { font-size: 9px; color: var(--dim); margin-top: 2px; }
+.gi-tc { color: var(--muted); }
+.gi-rated { color: var(--accent); }
+.gi-pager {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 10px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.gi-pager-btn { padding: 4px 10px; font-size: 9px; }
+.gi-page { font-size: 10px; color: var(--muted); }
+.gi-search-box, .gi-import-box {
+  display: flex; flex-direction: column; gap: 8px; padding: 8px;
+}
+.gi-search-box { flex-direction: row; align-items: center; }
+#gi-search-input, #gi-import-input {
+  flex: 1; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--font); font-size: 11px;
+}
+#gi-search-input:focus, #gi-import-input:focus {
+  outline: none; border-color: var(--accent-dim);
+}
+.gi-import-hint { font-size: 10px; color: var(--dim); margin-bottom: 4px; }
+.gi-import-btn { align-self: flex-start; }
+.gi-import-status { font-size: 10px; color: var(--dim); min-height: 14px; }
