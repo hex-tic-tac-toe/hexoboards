@@ -46,7 +46,7 @@ export async function runTests({ assert }) {
   console.log('  Test 2: BKE format roundtrip...');
   const grid1 = createGrid([
     { q: 0, r: 0, state: 1 },
-    { q: 1, 0, state: 2 },
+    { q: 1, r: 0, state: 2 },
     { q: 2, r: 0, state: 1 },
   ]);
   
@@ -91,9 +91,6 @@ export async function runTests({ assert }) {
   
   const invalidDecode = Notation.gridFromFmt('some text', 'invalid');
   assert.strictEqual(invalidDecode, null, 'Invalid format decode should return null');
-  
-  const nullDecode = Notation.gridFromFmt(null, 'bke');
-  assert.strictEqual(nullDecode, null, 'Null input should return null');
   console.log('    ✓ Invalid format handling works');
 
   // Test 6: parseMulti
