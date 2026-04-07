@@ -37,8 +37,12 @@ const GameImport = {
     try {
       const res = await fetch(`/api/hexo/games?id=${encodeURIComponent(gameId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const html = await res.text();
-      return GameImport.parseMovesFromHtml(html);
+      const text = await res.text();
+      const moves = GameImport.parseMovesFromHtml(text);
+      if (moves.length === 0) {
+        throw new Error('No moves found in game page');
+      }
+      return moves;
     } catch (e) {
       GameImport.error = e.message;
       return null;
@@ -47,22 +51,63 @@ const GameImport = {
 
   parseMovesFromHtml(html) {
     const moves = [];
-    const moveRegex = /Move\s+\d+[\s\S]*?(?:placed at|Initial board)[^\(]*\(([-\d]+),\s*([-\d]+)\)/gi;
+    
+    // Try JSON data in script tags (React apps often embed state this way)
+    const scriptMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+    if (scriptMatch) {
+      try {
+        const data = JSON.parse(scriptMatch[1]);
+        const props = data.props?.pageProps || data.props || {};
+        const gameData = props.game || props.initialGameState || props.gameState;
+        if (gameData?.moves) {
+          for (const m of gameData.moves) {
+            moves.push({ q: m.q ?? m.x ?? m.column, r: m.r ?? m.y ?? m.row });
+          }
+        }
+        if (gameData?.history) {
+          for (const m of gameData.history) {
+            moves.push({ q: m.q ?? m.x, r: m.r ?? m.y });
+          }
+        }
+        if (moves.length > 0) return moves;
+      } catch (e) { console.log('JSON parse failed', e.message); }
+    }
+    
+    // Try window.__GAME_DATA__ or similar
+    const windowMatch = html.match(/window\.__([A-Z_]+)\s*=\s*({.*?});/);
+    if (windowMatch) {
+      try {
+        const data = JSON.parse(windowMatch[2]);
+        if (data.moves) {
+          for (const m of data.moves) {
+            moves.push({ q: m.q ?? m.x, r: m.r ?? m.y });
+          }
+        }
+        if (moves.length > 0) return moves;
+      } catch (e) {}
+    }
+    
+    // Try embedded JSON in page props
+    const propsMatch = html.match(/"moves"\s*:\s*\[(.*?)\]/);
+    if (propsMatch) {
+      try {
+        const movesArr = JSON.parse('[' + propsMatch[1] + ']');
+        for (const m of movesArr) {
+          moves.push({ q: m.q ?? m.x, r: m.r ?? m.y });
+        }
+        if (moves.length > 0) return moves;
+      } catch (e) {}
+    }
+    
+    // Last resort: look for "placed at" pattern (may not work on minified HTML)
+    const regex = /placed at \(([-\d]+),\s*([-\d]+)\)/g;
     let match;
-    while ((match = moveRegex.exec(html)) !== null) {
+    while ((match = regex.exec(html)) !== null) {
       const q = parseInt(match[1], 10);
       const r = parseInt(match[2], 10);
       moves.push({ q, r });
     }
-    if (moves.length === 0) {
-      const altRegex = /placed at \(([-\d]+),\s*([-\d]+)\)/gi;
-      let altMatch;
-      while ((altMatch = altRegex.exec(html)) !== null) {
-        const q = parseInt(altMatch[1], 10);
-        const r = parseInt(altMatch[2], 10);
-        moves.push({ q, r });
-      }
-    }
+    
     return moves;
   },
 
@@ -100,7 +145,15 @@ const GameImport = {
       if (!moves || moves.length === 0) {
         throw new Error('No moves found');
       }
-      const hextic = GameImport.movesToHextic(moves);
+      // Skip duplicates (same position appears twice in HTML - once in timeline, once in current step)
+      const uniqueMoves = [];
+      for (const m of moves) {
+        const key = `${m.q},${m.r}`;
+        if (!uniqueMoves.some(u => `${u.q},${u.r}` === key)) {
+          uniqueMoves.push(m);
+        }
+      }
+      const hextic = GameImport.movesToHextic(uniqueMoves);
       GameImport.loading = false;
       if (GameImport.onImport) {
         GameImport.onImport(hextic, gameId);

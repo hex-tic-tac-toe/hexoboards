@@ -95,10 +95,11 @@ const App = {
         Match.title = `Imported from Hexo (${gameId.slice(0, 8)})`;
         UI.showMatch(() => { Match._renderPlayPanel(); Match._renderNotePanel(); Match._renderTree(); Match._buildBoard(); });
         App._toast('game imported');
-        GameImport.panelOpen = false;
-        GameImport._syncPanel();
+        document.getElementById('match-import-modal').hidden = true;
       } else {
         App._toast('failed to import game');
+        const status = document.getElementById('match-import-status');
+        if (status) status.textContent = 'failed to parse moves';
       }
     };
 
