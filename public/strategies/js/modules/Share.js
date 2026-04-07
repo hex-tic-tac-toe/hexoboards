@@ -26,16 +26,17 @@ const Share = {
   // ── upload ────────────────────────────────────────────────────────────────
 
   async upload(content, title, days, tab) {
+    // dpaste.com API v2 — multipart/form-data (same as curl -F), 201 Created on success
     const form = new FormData();
     form.append('content',     content);
-    form.append('title',       title);
     form.append('syntax',      'text');
+    form.append('title',       title || 'hexoboards');
     form.append('expiry_days', String(days));
     const r = await fetch('https://dpaste.com/api/v2/', { method: 'POST', body: form });
-    if (!r.ok) throw new Error('dpaste HTTP ' + r.status);
+    if (!r.ok) throw new Error(`dpaste ${r.status}`);
     const pasteUrl = (await r.text()).trim();
     if (!pasteUrl.startsWith('http')) throw new Error('unexpected dpaste response');
-    const id     = pasteUrl.split('/').filter(Boolean).pop();
+    const id     = pasteUrl.replace(/\/$/, '').split('/').filter(Boolean).pop();
     const appUrl = `${location.origin}${location.pathname}#remote/dpaste/${id}/${tab}`;
     return { pasteUrl, appUrl };
   },
@@ -44,8 +45,10 @@ const Share = {
 
   async fetchRemote(service, id) {
     if (service !== 'dpaste') throw new Error('unknown service: ' + service);
-    const r = await fetch(`https://dpaste.com/${id}.txt`);
-    if (!r.ok) throw new Error('dpaste fetch HTTP ' + r.status);
+    // Try the raw text URL; dpaste IDs should not include slashes or extensions
+    const cleanId = id.replace(/[^A-Za-z0-9_-]/g, '');
+    const r = await fetch(`https://dpaste.com/${cleanId}.txt`);
+    if (!r.ok) throw new Error(`dpaste fetch ${r.status}: paste may have expired`);
     return r.text();
   },
 

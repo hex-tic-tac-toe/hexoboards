@@ -169,6 +169,7 @@ const App = {
       if (!loaded && data.type === 'hexoboards-match' && data.tree) {
         MatchNode.resetId();
         Match.tree        = Match._deserialize(data.tree);
+        MatchNode.syncId(Match.tree);
         Match.currentNode = Match.tree;
         Match._collapsedChildren.clear();
         Match._boardActive = true;

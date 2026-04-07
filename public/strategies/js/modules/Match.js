@@ -34,6 +34,11 @@ import { WinDetector }    from './WinDetector.js';
 let _nodeId = 0;
 const MatchNode = {
   resetId() { _nodeId = 0; },
+  /** After deserializing a tree with pre-existing IDs, sync _nodeId to the max so new nodes don't collide. */
+  syncId(tree) {
+    const walk = n => { if (n.id > _nodeId) _nodeId = n.id; n.children.forEach(walk); };
+    walk(tree);
+  },
   create(opts = {}) {
     return {
       id:       opts.id       ?? ++_nodeId,
@@ -777,12 +782,15 @@ const Match = {
   },
 
   _renderNotePanel() {
-    let panel = document.getElementById('match-note-panel');
-    if (!panel) return;
-    panel.innerHTML = '';
+    // Render into #match-note-content so the resize handle (#match-note-resize)
+    // is never destroyed by innerHTML = ''
+    const panel   = document.getElementById('match-note-panel');
+    const content = document.getElementById('match-note-content');
+    if (!panel || !content) return;
+    content.innerHTML = '';
 
     const hdr = document.createElement('div'); hdr.className = 'play-panel-hdr'; hdr.textContent = 'Note';
-    panel.appendChild(hdr);
+    content.appendChild(hdr);
 
     const titleWrap = document.createElement('div'); titleWrap.className = 'play-note-wrap';
     const titleIn   = document.createElement('input'); titleIn.type = 'text';
@@ -809,9 +817,9 @@ const Match = {
       }
     });
 
-    panel.appendChild(titleWrap);
-    panel.appendChild(noteWrap);
-    panel.appendChild(saveLibBtn);
+    content.appendChild(titleWrap);
+    content.appendChild(noteWrap);
+    content.appendChild(saveLibBtn);
   },
 
   _renderEvalBar(score = 0.5) {
@@ -906,6 +914,7 @@ const Match = {
         const data = JSON.parse(raw);
         MatchNode.resetId();
         Match.tree               = Match._deserialize(data.tree);
+        MatchNode.syncId(Match.tree);  // sync _nodeId to max restored ID to avoid future collisions
         Match.currentNode        = Match.tree;
         Match.viewOffset         = {x:0,y:0}; Match.viewZoom=1;
         Match._collapsedChildren = new Set(data.collapsed||[]);
@@ -1028,6 +1037,7 @@ const Match = {
     }
 
     processArray(data);
+    MatchNode.syncId(Match.tree);  // ensure _nodeId > max ID used in loaded tree
 
     // Restore focus
     const positions = Match._nodeToArray(Match.tree);
