@@ -105,6 +105,8 @@ const App = {
       } catch (e) { App._toast('failed: ' + e.message); }
     } else if (hash.startsWith('remote/')) {
       try {
+        const remoteTab = hash.split('/')[3];
+        if (remoteTab) _shareTab = remoteTab;
         await App._handleRemoteHash(hash);
         history.replaceState(null, '', location.pathname);
       } catch (e) { App._toast('failed: ' + e.message); }
@@ -172,11 +174,13 @@ const App = {
   // ── remote hash: fetch from paste service and reconstruct ──────────────────
 
   async _handleRemoteHash(hash) {
+    console.log('_handleRemoteHash called with:', hash);
     const remote = Share.parseRemoteHash(hash);
     if (!remote) { App._toast('invalid link'); return; }
     App._toast('loading…');
     try {
       const text = await Share.fetchRemote(remote.service, remote.id);
+      console.log('Remote fetch complete, loading tab:', remote.tab);
       App._loadImportedData(remote.tab, JSON.parse(text));
     } catch (e) { App._toast('failed: ' + e.message); }
   },
