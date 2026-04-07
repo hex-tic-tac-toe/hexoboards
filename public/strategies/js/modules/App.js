@@ -7,7 +7,8 @@
  *   #b/<libId>/<secId>    → Browser
  *   #d                    → Libraries
  *   #c                    → Convert
- *   #remote/dpaste/ID/tab → fetch from paste service and reconstruct
+ *   #remote/gist/ID/tab → fetch from GitHub Gist and reconstruct
+   *   #remote/jsonbin/ID/tab → fetch from JSONBin.io and reconstruct
  */
 
 import { HexGrid }    from './HexGrid.js';

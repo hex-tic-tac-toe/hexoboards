@@ -446,6 +446,38 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
 }
 .share-paste-link:hover { color: var(--accent); }
 
+/* Service tabs */
+.share-svc-tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--border); }
+.share-svc-tab {
+  padding: 8px 12px; font-size: 11px; text-transform: none;
+  color: var(--muted); background: none; border: none;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.share-svc-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.share-svc-tab:hover:not(.active) { color: var(--text); }
+
+/* Auth row */
+.share-auth-row { display: flex; gap: 6px; align-items: center; }
+.share-auth-note { font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+.share-auth-input {
+  flex: 1; padding: 5px 8px;
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--font); font-size: 11px;
+}
+.share-pat-input:focus { outline: none; border-color: var(--accent-dim); }
+
+/* Action row */
+.share-action-row { display: flex; gap: 6px; }
+
+/* Gists section */
+.share-gists { background: rgba(0,0,0,.1); }
+.share-gist-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.share-gist-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.share-gist-info { font-size: 11px; color: var(--text); flex: 1; min-width: 0; }
+.share-gist-actions { display: flex; gap: 4px; }
+.btn-sm { font-size: 10px; padding: 3px 6px; }
+.btn-danger { color: #c55; border-color: #c55; }
+
 /* Local (no-upload) row */
 .share-local { background: rgba(0,0,0,.15); }
 .share-local-row { display: flex; gap: 6px; }
