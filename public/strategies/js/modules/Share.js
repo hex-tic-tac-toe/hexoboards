@@ -1,14 +1,18 @@
 /**
- * Share — tab-contextual export via remote services (GitHub Gist, JSONBin.io), and import from link.
+ * Share — tab-contextual export via remote services.
  *
  * showModal(tab, getContent, label, toast, onLoad)
- *   tab        'editor' | 'match'
+ *   tab        'editor' | 'match' | 'library'
  *   getContent () → JSON string
  *   label      human-readable title shown in the modal header
  *   toast      App._toast
  *   onLoad     optional (tab, parsedData) → void — called on successful import
  *
- * Supported services: gist, jsonbin
+ * Supported services:
+ *   cf       → hexoboards-hosted snapshots on Cloudflare Durable Objects (default)
+ *   gist     → GitHub Gist
+ *   jsonbin  → legacy import compatibility only
+ *
  * Service is identified in #remote/SERVICE/ID/TAB hash fragment.
  */
 
@@ -24,10 +28,58 @@ const Share = {
     return this._services[this._activeService];
   },
 
-  // ── service: GitHub Gist ────────────────────────────────────────────────────
+  visibleServices() {
+    return Object.values(this._services).filter(service => service.visible !== false);
+  },
+
+  // ── service: hexoboards-hosted snapshots ─────────────────────────────────
+  _cf: {
+    name: 'cf',
+    label: 'Hexoboards Cloud',
+    visible: true,
+    requiresAuth: false,
+    supportsItems: false,
+    createLabel: 'publish & copy link',
+    authNote: 'Hosted by hexoboards on Cloudflare Durable Objects. Public, immutable snapshots — no account required.',
+
+    async create(content, { tab }) {
+      const r = await fetch('/api/shares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, tab }),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => null);
+        throw new Error(data?.error || `error ${r.status}`);
+      }
+      return r.json();
+    },
+
+    async read(id) {
+      const r = await fetch(`/api/shares/${encodeURIComponent(id)}`);
+      if (!r.ok) throw new Error('not found');
+      return r.text();
+    },
+
+    parseUrl(input) {
+      try {
+        const url = new URL(input, location.origin);
+        const match = url.pathname.match(/^\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)\/?$/);
+        if (match) return { tab: match[1], id: match[2] };
+      } catch {}
+
+      const match = input.match(/\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)/);
+      return match ? { tab: match[1], id: match[2] } : null;
+    },
+  },
+
+  // ── service: GitHub Gist ─────────────────────────────────────────────────
   _gist: {
     name: 'gist',
     label: 'GitHub Gist',
+    visible: true,
+    requiresAuth: true,
+    supportsItems: true,
     authPlaceholder: 'GitHub PAT (re-enter each time)',
     authNote: 'A GitHub personal access token with "gist" scope is required. Generate one at GitHub Settings → Developer settings → Personal access tokens. Token is not stored.',
     hasAuth: false,
@@ -103,11 +155,9 @@ const Share = {
 
     parseUrl(url) {
       if (url.includes('gist.github.com')) {
-        // Matches gist.github.com/ID or gist.github.com/user/ID
         const m = url.match(/gist\.github\.com\/(?:[\w-]+\/)?([a-zA-Z0-9]+)/);
         return m ? m[1] : null;
       }
-      // Also accept raw gist ID (32-char hex string)
       if (/^[a-f0-9]{20,}$/i.test(url)) return url;
       return null;
     },
@@ -119,75 +169,11 @@ const Share = {
     },
   },
 
-  // ── service: JSONBin.io ──────────────────────────────────────────────────────────
+  // ── service: JSONBin.io (legacy import compatibility) ───────────────────
   _jsonbin: {
     name: 'jsonbin',
     label: 'JSONBin.io',
-    authPlaceholder: 'JSONBin API key (re-enter each time)',
-    authNote: 'JSONBin.io free tier: 100 writes/day. Token is not stored.',
-    hasAuth: false,
-    _key: null,
-
-    setAuth(key) { this._key = key; this.hasAuth = !!key; },
-    getAuth() { return this._key; },
-    clearAuth() { this._key = null; this.hasAuth = false; },
-
-    _authHeaders() {
-      return this._key ? { 'X-Master-Key': this._key } : {};
-    },
-
-    async create(content) {
-      const r = await fetch('https://api.jsonbin.io/v3/bins', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
-        body: content,
-      });
-      if (!r.ok) {
-        const text = await r.text();
-        if (r.status === 403 && text.includes('limit')) throw new Error('daily limit exceeded (100/day)');
-        if (r.status === 401) throw new Error('invalid API key');
-        throw new Error(`error ${r.status}`);
-      }
-      const d = await r.json();
-      return { id: d.metadata.id, url: d.metadata.url };
-    },
-
-    async update(id, content) {
-      const r = await fetch(`https://api.jsonbin.io/v3/bins/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
-        body: content,
-      });
-      if (!r.ok) {
-        const text = await r.text();
-        if (r.status === 403 && text.includes('limit')) throw new Error('daily limit exceeded (100/day)');
-        if (r.status === 401) throw new Error('invalid key or bin');
-        throw new Error(`error ${r.status}`);
-      }
-      const d = await r.json();
-      return { id: d.metadata.id, url: d.metadata.url };
-    },
-
-    async delete(id) {
-      const r = await fetch(`https://api.jsonbin.io/v3/bins/${id}`, { method: 'DELETE', headers: this._authHeaders() });
-      if (!r.ok) {
-        if (r.status === 401) throw new Error('invalid key or bin');
-        throw new Error(`error ${r.status}`);
-      }
-    },
-
-    async list() {
-      throw new Error('use URL to load');
-    },
-
-    async get(id) {
-      const r = await fetch(`https://api.jsonbin.io/v3/bins/${id}`, { headers: this._authHeaders() });
-      if (!r.ok) {
-        if (r.status === 401) throw new Error('invalid key or bin');
-        throw new Error(`error ${r.status}`);
-      }
-      return r.json();
-    },
+    visible: false,
 
     async read(id) {
       const r = await fetch(`https://api.jsonbin.io/v3/b/${id}`);
@@ -202,25 +188,19 @@ const Share = {
       }
       return null;
     },
-
-    formatInfo(d) {
-      const name = d.metadata?.name || 'unnamed';
-      const date = new Date(d.metadata?.createdAt).toLocaleDateString();
-      return `${name} (${date})`;
-    },
   },
 
   // ── init ────────────────────────────────────────────────────────────────
   init() {
+    this.register(this._cf);
     this.register(this._gist);
     this.register(this._jsonbin);
-    this._activeService = 'gist';
+    this._activeService = 'cf';
   },
 
   // ── parse hash ──────────────────────────────────────────────────────────
   parseRemoteHash(hash) {
     if (!hash) return null;
-    // Strip leading # if present
     if (hash.startsWith('#')) hash = hash.slice(1);
     if (!hash.startsWith('remote/')) return null;
     const [service, id, tab] = hash.slice(7).split('/');
@@ -231,25 +211,24 @@ const Share = {
     if (!url || typeof url !== 'string') return null;
     url = url.trim();
     if (!url) return null;
-    
-    // Check for #remote/... in the URL
+
     if (url.includes('#remote/')) {
       const hashIdx = url.indexOf('#remote/');
       const result = this.parseRemoteHash(url.slice(hashIdx + 1));
       if (result) return result;
     }
 
-    // Check each service for a URL match
     for (const svc of Object.values(this._services)) {
-      const id = svc.parseUrl(url);
-      if (id) return { service: svc.name, id, tab: defaultTab };
+      const parsed = svc.parseUrl?.(url);
+      if (!parsed) continue;
+      if (typeof parsed === 'string') return { service: svc.name, id: parsed, tab: defaultTab };
+      return { service: svc.name, id: parsed.id, tab: parsed.tab || defaultTab };
     }
-    
-    // Check if the whole thing looks like a gist ID (hex string 20+ chars)
+
     if (/^[a-f0-9]{20,}$/i.test(url)) {
       return { service: 'gist', id: url, tab: defaultTab };
     }
-    
+
     return null;
   },
 
@@ -260,18 +239,19 @@ const Share = {
     return svc.read(id);
   },
 
-  // ── local ────────────────────────────────────────────────────────
+  // ── local ──────────────────────────────────────────────────────────────
   download(content, filename) {
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(new Blob([content], { type: 'application/json' })),
       download: filename,
     });
-    a.click(); URL.revokeObjectURL(a.href);
+    a.click();
+    URL.revokeObjectURL(a.href);
   },
 
   async copy(text) { await navigator.clipboard.writeText(text); },
 
-  // ── modal ──────────────────────────────────────────────────────────
+  // ── modal ──────────────────────────────────────────────────────────────
   showModal(tab, getContent, label, toast, onLoad) {
     document.getElementById('share-modal')?.remove();
     document.getElementById('share-backdrop')?.remove();
@@ -298,9 +278,8 @@ const Share = {
     cls.addEventListener('click', close);
     hdr.append(ttl, cls); modal.appendChild(hdr);
 
-    // Service tabs
     const svcTabs = document.createElement('div'); svcTabs.className = 'share-svc-tabs';
-    for (const svc of Object.values(this._services)) {
+    for (const svc of this.visibleServices()) {
       const btn = document.createElement('button'); btn.className = 'btn share-svc-tab';
       btn.textContent = svc.label;
       if (svc.name === this._activeService) btn.classList.add('active');
@@ -310,30 +289,47 @@ const Share = {
         btn.classList.add('active');
         rebuildAuth();
         rebuildItems();
+        updateCreateButton();
       });
       svcTabs.appendChild(btn);
     }
     modal.appendChild(svcTabs);
 
-    let authSec, newSec, itemsSec, itemsList, loadMoreBtn;
+    let authSec, newSec, itemsSec, itemsList, loadMoreBtn, newBtn;
     let currentPage = 1;
     const svc = () => this._services[this._activeService];
+
+    const updateCreateButton = () => {
+      if (newBtn) newBtn.textContent = svc().createLabel || 'create & copy link';
+    };
 
     const rebuildAuth = () => {
       authSec?.remove();
       authSec = document.createElement('div'); authSec.className = 'share-section';
       const authLbl = document.createElement('div'); authLbl.className = 'share-section-label';
+      authSec.appendChild(authLbl);
+
+      if (!svc().requiresAuth) {
+        authLbl.textContent = svc().label;
+        const authNote = document.createElement('div'); authNote.className = 'share-auth-note';
+        authNote.textContent = svc().authNote;
+        authSec.appendChild(authNote);
+        modal.insertBefore(authSec, newSec);
+        return;
+      }
+
       const authRow = document.createElement('div'); authRow.className = 'share-auth-row';
       const authInput = document.createElement('input'); authInput.type = 'password';
       authInput.className = 'share-auth-input';
       authInput.placeholder = svc().authPlaceholder;
       const authBtn = document.createElement('button'); authBtn.className = 'btn';
       authBtn.textContent = svc().hasAuth ? '✓ loaded' : 'authenticate';
-      authRow.append(authInput, authBtn); authSec.append(authLbl, authRow); modal.insertBefore(authSec, newSec);
+      authRow.append(authInput, authBtn); authSec.appendChild(authRow);
       const authNote = document.createElement('div'); authNote.className = 'share-auth-note';
       authNote.textContent = svc().authNote;
-      authSec.append(authNote);
+      authSec.appendChild(authNote);
       authLbl.textContent = svc().label + ' authentication';
+      modal.insertBefore(authSec, newSec);
 
       authBtn.addEventListener('click', async () => {
         const key = authInput.value.trim();
@@ -349,7 +345,7 @@ const Share = {
 
     const rebuildItems = () => {
       itemsSec?.remove();
-      if (!svc().hasAuth) return;
+      if (!svc().supportsItems || !svc().hasAuth) return;
 
       itemsSec = document.createElement('div'); itemsSec.className = 'share-section share-gists';
       const itemsLbl = document.createElement('div'); itemsLbl.className = 'share-section-label';
@@ -369,23 +365,19 @@ const Share = {
         }
         setStatus('loading…');
         try {
-          if (!svc().hasAuth) { setStatus('auth required', true); return; }
-          const items = svc().name === 'gist'
-            ? await svc().list(currentPage, 20)
-            : await svc().list();
-          
+          const items = await svc().list(currentPage, 20);
+
           if (!items || (Array.isArray(items) && !items.length) || items.length === 0) {
             if (currentPage === 1) itemsList.textContent = 'no items';
             setStatus('');
             loadMoreBtn.hidden = true;
             return;
           }
-          
-          // Filter for gist: only show hexoboards gists
-          const filtered = svc().name === 'gist' 
+
+          const filtered = svc().name === 'gist'
             ? items.filter(g => g.description?.includes('hexoboards'))
             : items;
-          
+
           if (filtered.length === 0 && currentPage === 1) {
             itemsList.textContent = 'no hexoboards items';
             setStatus('');
@@ -403,13 +395,8 @@ const Share = {
               loadBtn.disabled = true;
               try {
                 const d = await svc().get(item.id);
-                let content;
-                if (svc().name === 'jsonbin') {
-                  content = JSON.stringify(d.record);
-                } else {
-                  const key = Object.keys(d.files)[0];
-                  content = d.files[key]?.content || '';
-                }
+                const key = Object.keys(d.files)[0];
+                const content = d.files[key]?.content || '';
                 onLoad(tab, JSON.parse(content));
                 setStatus('loaded'); close();
               } catch (e) { setStatus(e.message, true); }
@@ -419,13 +406,10 @@ const Share = {
             saveBtn.addEventListener('click', async () => {
               saveBtn.disabled = true; setStatus('saving…');
               try {
-                const content = getContent();
-                console.log('Saving to gist', item.id, ':', content);
-                await svc().update(item.id, content);
+                await svc().update(item.id, getContent());
                 setStatus('saved'); toast?.('saved');
-              } catch (e) { 
-                console.error('Save failed:', e);
-                setStatus(e.message, true); 
+              } catch (e) {
+                setStatus(e.message, true);
               }
               saveBtn.disabled = false;
             });
@@ -441,36 +425,35 @@ const Share = {
             });
             acts.append(loadBtn, saveBtn, delBtn); row.append(info, acts); itemsList.appendChild(row);
           }
-          
+
           setStatus('');
-          // Show load more for gist if we got results
           loadMoreBtn.hidden = svc().name !== 'gist' || filtered.length < 20;
-        } catch (e) { 
-          setStatus(e.message, true); 
+        } catch (e) {
+          setStatus(e.message, true);
           loadMoreBtn.hidden = true;
         }
       };
-      
+
       refreshBtn.addEventListener('click', () => loadItems(false));
-      loadMoreBtn.addEventListener('click', () => { currentPage++; loadItems(true); });
+      loadMoreBtn.addEventListener('click', () => { currentPage += 1; loadItems(true); });
       loadItems(false);
     };
 
-    // Create section
     newSec = document.createElement('div'); newSec.className = 'share-section';
     const newLbl = document.createElement('div'); newLbl.className = 'share-section-label';
     newLbl.textContent = 'Create new (public)';
     const newRow = document.createElement('div'); newRow.className = 'share-action-row';
-    const newBtn = document.createElement('button'); newBtn.className = 'btn';
-    newBtn.textContent = 'create & copy link';
+    newBtn = document.createElement('button'); newBtn.className = 'btn';
     newBtn.addEventListener('click', async () => {
-      newBtn.disabled = true; setStatus('creating…');
+      newBtn.disabled = true; setStatus(svc().name === 'cf' ? 'publishing…' : 'creating…');
       try {
-        if (!svc().hasAuth) throw new Error('authenticate first');
-        const { id } = await svc().create(getContent());
-        const appUrl = `${location.origin}${location.pathname}#remote/${svc().name}/${id}/${tab}`;
-        await this.copy(appUrl);
-        setStatus('link copied'); toast?.('created');
+        if (svc().requiresAuth && !svc().hasAuth) throw new Error('authenticate first');
+        const result = await svc().create(getContent(), { tab });
+        const link = result.appUrl || `${location.origin}${location.pathname}#remote/${svc().name}/${result.id}/${tab}`;
+        await this.copy(link);
+        setStatus('link copied');
+        toast?.(svc().name === 'cf' ? 'published' : 'created');
+        if (svc().supportsItems) rebuildItems();
       } catch (e) { setStatus(e.message, true); }
       newBtn.disabled = false;
     });
@@ -478,8 +461,8 @@ const Share = {
 
     rebuildAuth();
     rebuildItems();
+    updateCreateButton();
 
-    // Local only
     const localSec = document.createElement('div'); localSec.className = 'share-section share-local';
     const localLbl = document.createElement('div'); localLbl.className = 'share-section-label';
     localLbl.textContent = 'Local only';
@@ -490,7 +473,6 @@ const Share = {
     cpBtn.addEventListener('click', async () => { await this.copy(getContent()); toast?.('JSON copied'); });
     localRow.append(dlBtn, cpBtn); localSec.append(localLbl, localRow); modal.appendChild(localSec);
 
-    // Import
     if (onLoad) {
       const impSec = document.createElement('div'); impSec.className = 'share-section share-import-sec';
       const impLbl = document.createElement('div'); impLbl.className = 'share-section-label';
@@ -498,7 +480,7 @@ const Share = {
       const impRow = document.createElement('div'); impRow.className = 'share-import-row';
       const impInput = document.createElement('input'); impInput.type = 'text';
       impInput.className = 'share-import-input';
-      impInput.placeholder = 'gist/jsonbin URL or app link…';
+      impInput.placeholder = 'hexoboards/gist URL or app link…';
       const impBtn = document.createElement('button'); impBtn.className = 'btn'; impBtn.textContent = 'load';
 
       const doImport = async () => {

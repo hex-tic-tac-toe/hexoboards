@@ -34,6 +34,14 @@ npm install
 npm run dev
 ```
 
+## Tests
+
+```bash
+npm test
+```
+
+This runs a local Wrangler smoke test for the Durable Object share flow.
+
 ## Manual deploys
 
 ```bash
@@ -54,6 +62,7 @@ GitHub Actions expects these repository secrets:
 - `cloudflare/wrangler-action@v3` in CI
 - separate Wrangler `staging` environment
 - Workers static assets via `assets.directory`
+- Durable Objects for first-party hosted game snapshots
 - `not_found_handling: "404-page"`
 - `observability.enabled: true`
 - Vercel proxy project in front of Cloudflare while DNS remains on Vercel

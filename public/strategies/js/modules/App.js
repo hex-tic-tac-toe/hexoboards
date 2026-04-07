@@ -2,13 +2,14 @@
  * App — central initialisation and event wiring.
  *
  * Hash routing:
- *   (empty / board code)  → Editor
- *   #m  (legacy #a)       → Match
- *   #b/<libId>/<secId>    → Browser
- *   #d                    → Libraries
- *   #c                    → Convert
- *   #remote/gist/ID/tab → fetch from GitHub Gist and reconstruct
-   *   #remote/jsonbin/ID/tab → fetch from JSONBin.io and reconstruct
+ *   (empty / board code)   → Editor
+ *   #m  (legacy #a)        → Match
+ *   #b/<libId>/<secId>     → Browser
+ *   #d                     → Libraries
+ *   #c                     → Convert
+ *   #remote/cf/ID/tab      → fetch from Hexoboards Cloud and reconstruct
+ *   #remote/gist/ID/tab    → fetch from GitHub Gist and reconstruct
+ *   #remote/jsonbin/ID/tab → fetch from legacy JSONBin.io and reconstruct
  */
 
 import { HexGrid }    from './HexGrid.js';
