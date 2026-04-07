@@ -4,6 +4,7 @@ const SHARE_TABS = new Set(['editor', 'match', 'library']);
 const SHARE_ID_ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SHARE_ID_LENGTH = 12;
 const MAX_SHARE_BYTES = 200_000;
+const HEXO_API_BASE = 'https://hexo.did.science';
 
 function normalizeForwardedHost(value) {
   if (!value) {
@@ -281,6 +282,47 @@ export class GameShare extends DurableObject {
   }
 }
 
+async function proxyHexoApi(path, search) {
+  try {
+    const targetUrl = new URL(path, HEXO_API_BASE);
+    targetUrl.search = search;
+    const response = await fetch(targetUrl, {
+      headers: {
+        'accept': 'application/json',
+      },
+    });
+    const data = await response.json();
+    return jsonResponse(data, 200, {
+      'cache-control': 'public, max-age=60',
+      'access-control-allow-origin': '*',
+    });
+  } catch (e) {
+    return errorResponse(`hexo api error: ${e.message}`, 502);
+  }
+}
+
+async function proxyHexoGame(gameId) {
+  try {
+    const targetUrl = new URL(`/games/${gameId}`, HEXO_API_BASE);
+    const response = await fetch(targetUrl, {
+      headers: {
+        'accept': 'text/html',
+      },
+    });
+    const html = await response.text();
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'public, max-age=3600',
+        'access-control-allow-origin': '*',
+      },
+    });
+  } catch (e) {
+    return errorResponse(`hexo game error: ${e.message}`, 502);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = publicRequestUrl(request);
@@ -304,6 +346,31 @@ export default {
         return methodNotAllowed(['GET', 'HEAD']);
       }
       return shareStub(env, apiShare.id).fetch(`https://share.internal/${apiShare.meta ? 'meta' : 'content'}`);
+    }
+
+    if (url.pathname === '/api/hexo/finished-games') {
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        return methodNotAllowed(['GET', 'HEAD']);
+      }
+      return proxyHexoApi('/api/finished-games', url.search);
+    }
+
+    if (url.pathname === '/api/hexo/sessions') {
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        return methodNotAllowed(['GET', 'HEAD']);
+      }
+      return proxyHexoApi('/api/sessions', '');
+    }
+
+    if (url.pathname === '/api/hexo/games') {
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        return methodNotAllowed(['GET', 'HEAD']);
+      }
+      const gameId = url.searchParams.get('id');
+      if (!gameId) {
+        return errorResponse('id parameter required');
+      }
+      return proxyHexoGame(gameId);
     }
 
     const share = parseSharePath(url.pathname);

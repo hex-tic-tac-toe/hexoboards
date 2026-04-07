@@ -9,8 +9,6 @@
  *   • Convert hexo moves to hextic notation
  */
 
-const HEXO_BASE = 'https://hexo.did.science';
-
 const GameImport = {
   panelOpen: false,
   currentPage: 1,
@@ -33,7 +31,7 @@ const GameImport = {
     GameImport.loading = true;
     GameImport.error = null;
     try {
-      const res = await fetch(`${HEXO_BASE}/api/finished-games?page=${page}&pageSize=${GameImport.pageSize}`);
+      const res = await fetch(`/api/hexo/finished-games?page=${page}&pageSize=${GameImport.pageSize}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       GameImport.games = data.games || [];
@@ -51,7 +49,7 @@ const GameImport = {
     GameImport.loading = true;
     GameImport.error = null;
     try {
-      const res = await fetch(`${HEXO_BASE}/api/sessions`);
+      const res = await fetch('/api/hexo/sessions');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       GameImport.sessions = data || [];
@@ -66,7 +64,7 @@ const GameImport = {
 
   async fetchGameMoves(gameId) {
     try {
-      const res = await fetch(`${HEXO_BASE}/games/${gameId}`);
+      const res = await fetch(`/api/hexo/games?id=${encodeURIComponent(gameId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const html = await res.text();
       return GameImport.parseMovesFromHtml(html);
@@ -156,7 +154,7 @@ const GameImport = {
     GameImport.loading = true;
     GameImport.error = null;
     try {
-      const res = await fetch(`${HEXO_BASE}/api/finished-games?page=${page}&pageSize=50`);
+      const res = await fetch(`/api/hexo/finished-games?page=${page}&pageSize=50`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const q = query.toLowerCase();
