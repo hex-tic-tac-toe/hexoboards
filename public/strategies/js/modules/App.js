@@ -460,7 +460,7 @@ const App = {
 
     document.getElementById('btn-match-import').addEventListener('click', () => {
       const modal = document.getElementById('match-import-modal');
-      if (modal) { modal.hidden = !modal.hidden; if (!modal.hidden) document.getElementById('match-import-ta')?.focus(); }
+      if (modal) { modal.hidden = !modal.hidden; if (!modal.hidden) GameImport.refresh(); }
     });
     document.getElementById('btn-match-import-close').addEventListener('click', () => {
       document.getElementById('match-import-modal').hidden = true;
@@ -488,12 +488,41 @@ const App = {
       } catch (e) { if (statusEl) statusEl.textContent = 'failed: ' + e.message; }
     });
 
+    // Import modal tabs
+    document.querySelectorAll('.match-import-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.match-import-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const tabName = tab.dataset.tab;
+        document.getElementById('match-import-notation').hidden = tabName !== 'notation';
+        document.getElementById('match-import-hexo').hidden = tabName !== 'hexo';
+        if (tabName === 'hexo') GameImport.refresh();
+      });
+    });
+
+    // Hexo import
+    document.getElementById('btn-hexo-import')?.addEventListener('click', async () => {
+      const input = document.getElementById('hexo-game-id');
+      const status = document.getElementById('match-import-status');
+      if (!input || !status) return;
+      const val = input.value.trim();
+      if (!val) return;
+      status.textContent = 'Importing…';
+      const gameId = GameImport.parseGameUrl(val);
+      if (!gameId) { status.textContent = 'Invalid game ID or URL'; return; }
+      const hextic = await GameImport.importGame(gameId);
+      if (hextic) status.textContent = 'Imported!';
+      else status.textContent = GameImport.error || 'Import failed';
+    });
+    document.getElementById('hexo-game-id')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-hexo-import')?.click();
+    });
+    document.getElementById('btn-hexo-prev')?.addEventListener('click', () => GameImport.prevPage());
+    document.getElementById('btn-hexo-next')?.addEventListener('click', () => GameImport.nextPage());
+
     // Match panel toggle buttons
     document.getElementById('match-play-toggle').addEventListener('click', () => {
       Match.playOpen = !Match.playOpen; Match._syncMatchPanels(); Match._buildBoard();
-    });
-    document.getElementById('btn-gameimport-toggle')?.addEventListener('click', () => {
-      GameImport.togglePanel();
     });
     document.getElementById('match-note-toggle').addEventListener('click', () => {
       Match.noteOpen = !Match.noteOpen; Match._syncMatchPanels(); Match._renderNotePanel(); Match._buildBoard();
