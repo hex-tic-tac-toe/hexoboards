@@ -107,26 +107,29 @@ const App = {
     }
 
     // Board hash or empty → restore from localStorage or URL
-    const isBoardHash = hash && !hash.startsWith('b/') && !hash.startsWith('remote/')
-      && hash !== 'd' && hash !== 'c' && hash !== 'm' && hash !== 'a';
-    if (isBoardHash) {
-      const decoded = URLCodec.decodeFull(hash);
-      if (decoded) {
-        Editor.grid   = decoded.grid;
-        Editor.labels = decoded.labels.map(l => ({ ...l, mark: l.mark ?? l.letter ?? 'a' }));
-        document.getElementById('input-size').value = decoded.grid.s;
-        Editor.noteOpen = decoded.labels.length > 0;
+    // Skip if we're loading from a share link (data already loaded)
+    if (!_shareTab) {
+      const isBoardHash = hash && !hash.startsWith('b/') && !hash.startsWith('remote/')
+        && hash !== 'd' && hash !== 'c' && hash !== 'm' && hash !== 'a';
+      if (isBoardHash) {
+        const decoded = URLCodec.decodeFull(hash);
+        if (decoded) {
+          Editor.grid   = decoded.grid;
+          Editor.labels = decoded.labels.map(l => ({ ...l, mark: l.mark ?? l.letter ?? 'a' }));
+          document.getElementById('input-size').value = decoded.grid.s;
+          Editor.noteOpen = Editor.labels.length > 0;
+          Editor._syncPanels();
+          Editor._syncMode();
+        } else { Editor.loadNode(null); }
+      } else if (!Editor._loadState()) {
+        // No URL board, no saved state → fresh board
+        Editor.loadNode(null);
+      } else {
+        // State loaded; sync UI panels
         Editor._syncPanels();
+        Editor._syncFooter();
         Editor._syncMode();
-      } else { Editor.loadNode(null); }
-    } else if (!Editor._loadState()) {
-      // No URL board, no saved state → fresh board
-      Editor.loadNode(null);
-    } else {
-      // State loaded; sync UI panels
-      Editor._syncPanels();
-      Editor._syncFooter();
-      Editor._syncMode();
+      }
     }
 
     App._bindEvents();
