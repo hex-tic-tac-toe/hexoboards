@@ -90,7 +90,6 @@ const App = {
     const shareMatch = location.pathname.match(/^\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)\/?$/);
     if (shareMatch) {
       _shareTab = shareMatch[1];
-      localStorage.removeItem(Store._K.editor);
       const tab = _shareTab;
       const id = shareMatch[2];
       App._toast('loading…');
