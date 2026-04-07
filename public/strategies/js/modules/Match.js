@@ -1007,6 +1007,9 @@ const Match = {
     catch { return false; }
     if (!Array.isArray(data)) return false;
 
+    // Check if array contains [q,r] pairs (axial format) instead of natural numbers
+    const isAxialFormat = data.length > 0 && Array.isArray(data[0]) && data[0].length === 2;
+
     // Rebuild tree using the same algorithm as hextic's processSerializedArray
     MatchNode.resetId();
     Match.tree = MatchNode.create({ turn: 0 });
@@ -1017,6 +1020,21 @@ const Match = {
       for (const item of arr) {
         if (typeof item === 'number') {
           const { q, r } = _natToHex(item);
+          const t     = cursor.node.turn;
+          const state = (t % 4 === 0 || t % 4 === 3) ? 1 : 2;
+          const cells = new Map(Array.from(cursor.node.grid.cells, ([k, c]) => [k, { ...c }]));
+          cells.set(HexGrid.key(q, r), { q, r, state, legal: false });
+          const newNode = MatchNode.create({
+            parent:   cursor.node,
+            turn:     t + 1,
+            grid:     { cells },
+            lastMove: { q, r, state, turn: t },
+          });
+          cursor.node.children.push(newNode);
+          cursor.node = newNode;
+        } else if (Array.isArray(item) && item.length === 2 && typeof item[0] === 'number') {
+          // Axial format: [q, r]
+          const q = item[0], r = item[1];
           const t     = cursor.node.turn;
           const state = (t % 4 === 0 || t % 4 === 3) ? 1 : 2;
           const cells = new Map(Array.from(cursor.node.grid.cells, ([k, c]) => [k, { ...c }]));

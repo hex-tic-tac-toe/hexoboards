@@ -115,8 +115,8 @@ const GameImport = {
     if (!moves || moves.length === 0) return '';
     const result = [];
     for (const move of moves) {
-      const nat = GameImport._hexToNat(move.q, move.r);
-      result.push(nat);
+      // Output [q,r] axial format
+      result.push([move.q, move.r]);
     }
     return JSON.stringify(result);
   },
