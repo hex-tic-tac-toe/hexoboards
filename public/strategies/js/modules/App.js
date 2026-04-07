@@ -83,6 +83,7 @@ const App = {
     // Resolve startup hash
     const hash = window.location.hash.slice(1);
     let _shareTab = null;
+    let _shareLoaded = false;
 
     Match._load();
     Match.init();
@@ -96,7 +97,10 @@ const App = {
       App._toast('loading…');
       try {
         const text = await Share.fetchRemote('cf', id);
+        console.log('Fetched share data, loading...');
         App._loadImportedData(tab, JSON.parse(text));
+        _shareLoaded = true;
+        console.log('Share load complete, replacing state');
         history.replaceState(null, '', location.pathname);
       } catch (e) { App._toast('failed: ' + e.message); }
     } else if (hash.startsWith('remote/')) {
@@ -140,9 +144,11 @@ const App = {
     await Store.fetchDefaults();
     await Store.fetchAllActive();
     Browser._renderNav();
+    console.log('Routing: _shareTab =', _shareTab, ', hash =', hash);
 
     // Route to view
     if (_shareTab) {
+      console.log('Showing correct tab:', _shareTab);
       if (_shareTab === 'editor') UI.showEditor(() => Editor._buildBoard());
       else if (_shareTab === 'match') UI.showMatch(() => { if (!Match._boardActive) Match._showStartModal(); Match._buildBoard(); });
       else if (_shareTab === 'library') UI.showBrowser(() => Browser.render(Store.LOCAL));
@@ -536,6 +542,7 @@ const App = {
     });
 
     window.addEventListener('hashchange', () => {
+      if (_shareLoaded) return;
       const h=window.location.hash.slice(1);
       if (!h||h.startsWith('b/')||h==='d'||h==='c'||h==='m'||h==='a'||h.startsWith('remote/')) return;
       const d=URLCodec.decodeFull(h); if(!d) return;

@@ -50,8 +50,8 @@ const UI = {
     });
   },
 
-  showEditor(onEnter)  { UI._show('editor',  onEnter, ''); },
-  showMatch(onEnter)   { UI._show('match',   onEnter, 'm'); },
+  showEditor(onEnter)  { console.log('UI.showEditor called'); UI._show('editor',  onEnter, ''); },
+  showMatch(onEnter)   { console.log('UI.showMatch called'); UI._show('match',   onEnter, 'm'); },
   showBrowser(onEnter) { UI._show('browser', onEnter, null); },   // caller updates hash
   showData(onEnter)    { UI._show('data',    onEnter, 'd'); },
   showConvert(onEnter) { UI._show('convert', onEnter, 'c'); },
