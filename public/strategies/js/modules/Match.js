@@ -402,7 +402,10 @@ const Match = {
       if (e.key==='ArrowUp'  ||e.key==='k') { e.preventDefault(); Match._goToById(+nodes[Math.max(curIdx-1,0)]?.dataset.nodeId); }
     };
 
-    requestAnimationFrame(() => container.querySelector('.tree-node.current')?.scrollIntoView({block:'nearest'}));
+    requestAnimationFrame(() => {
+      container.querySelector('.tree-node.current')?.scrollIntoView({block:'nearest'});
+      Match._updateNotationPanel();
+    });
   },
 
   // ── label picker ──────────────────────────────────────────────────────────
@@ -511,6 +514,115 @@ const Match = {
     return node;
   },
 
+
+  // ── Hextic notation (import / export) ────────────────────────────────────
+
+  /**
+   * Serialize the full match tree to hextic clipboard format.
+   * Numbers are Cantor-paired (q,r) coordinates; sub-arrays are branches.
+   * Appends `;focusIndex` so the current node is restored on load.
+   */
+  toHextic() {
+    if (!Match.tree?.children.length) return '';
+
+    function serializeNode(node) {
+      const coord = _hexToNat(node.lastMove.q, node.lastMove.r);
+      const result = [coord];
+      if (node.children.length === 1) {
+        const child = serializeNode(node.children[0]);
+        if (child) result.push(...child);
+      } else {
+        for (const child of node.children) {
+          const s = serializeNode(child);
+          if (s) result.push(s);
+        }
+      }
+      return result;
+    }
+
+    const roots = Match.tree.children;
+    const serialized = roots.length === 1
+      ? serializeNode(roots[0])
+      : roots.map(c => serializeNode(c));
+
+    // DFS index of the current node
+    const positions = Match._nodeToArray(Match.tree);
+    const focusIndex = positions.indexOf(Match.currentNode);
+
+    let out = JSON.stringify(serialized);
+    if (focusIndex > 0) out += ';' + focusIndex;
+    return out;
+  },
+
+  /**
+   * Deserialize a hextic clipboard string and replace the current tree.
+   * Returns true on success, false if the format is unrecognised.
+   */
+  fromHextic(text) {
+    if (!text?.trim()) return false;
+
+    let treeText = text, focusIndex = -1;
+    const semi = text.indexOf(';');
+    if (semi > 0) {
+      treeText   = text.slice(0, semi);
+      focusIndex = parseInt(text.slice(semi + 1), 10);
+    }
+
+    let data;
+    try { data = JSON.parse(treeText.trim()); }
+    catch { return false; }
+    if (!Array.isArray(data)) return false;
+
+    // Rebuild tree using the same algorithm as hextic's processSerializedArray
+    MatchNode.resetId();
+    Match.tree = MatchNode.create({ turn: 0 });
+    Match._collapsedChildren.clear();
+    const cursor = { node: Match.tree };
+
+    function processArray(arr) {
+      for (const item of arr) {
+        if (typeof item === 'number') {
+          const { q, r } = _natToHex(item);
+          const t     = cursor.node.turn;
+          const state = (t % 4 === 0 || t % 4 === 3) ? 1 : 2;
+          const cells = new Map(Array.from(cursor.node.grid.cells, ([k, c]) => [k, { ...c }]));
+          cells.set(HexGrid.key(q, r), { q, r, state, legal: false });
+          const newNode = MatchNode.create({
+            parent:   cursor.node,
+            turn:     t + 1,
+            grid:     { cells },
+            lastMove: { q, r, state, turn: t },
+          });
+          cursor.node.children.push(newNode);
+          cursor.node = newNode;
+        } else if (Array.isArray(item)) {
+          const saved = cursor.node;
+          processArray(item);
+          cursor.node = saved;
+        }
+      }
+    }
+
+    processArray(data);
+
+    // Restore focus
+    const positions = Match._nodeToArray(Match.tree);
+    Match.currentNode = (focusIndex >= 0 && focusIndex < positions.length)
+      ? positions[focusIndex]
+      : Match.tree;
+
+    Match._save();
+    Match._renderTree();
+    Match._buildBoard();
+    return true;
+  },
+
+  /** Update the notation textarea (skip when the textarea is focused). */
+  _updateNotationPanel() {
+    const ta = document.getElementById('match-notation-ta');
+    if (ta && document.activeElement !== ta) ta.value = Match.toHextic();
+  },
+
   // ── events ────────────────────────────────────────────────────────────────
 
   _bindEvents() {
@@ -604,5 +716,30 @@ const Match = {
     window.addEventListener('resize',()=>{ if(UI.activeView==='match') Match._buildBoard(); });
   },
 };
+
+// ── Hextic notation codec ─────────────────────────────────────────────────────
+// Compatible with the hextic game's clipboard format (github.com/waffle3z/hextic).
+// Uses Cantor pairing to encode axial (q,r) coordinates as natural numbers,
+// and a nested JSON array to represent the full game tree with branches.
+
+// Integer ↔ natural bijection: 0→0, 1→1, -1→2, 2→3, -2→4, 3→5, -3→6 …
+// f(n) = 2n-1 for n>0,  -2n for n≤0
+function _intToNat(n) { return n > 0 ? 2 * n - 1 : -2 * n; }
+function _natToInt(n) { return n === 0 ? 0 : n % 2 === 1 ? (n + 1) / 2 : -n / 2; }
+
+// Szudzik pairing (matches hextic's clipboard format exactly)
+// pair(a,b) = a²+a+b if a≥b, else a+b²
+function _hexToNat(q, r) {
+  const a = _intToNat(q), b = _intToNat(r);
+  return a >= b ? a * a + a + b : a + b * b;
+}
+
+function _natToHex(n) {
+  const m = Math.floor(Math.sqrt(n));
+  const a = n - m * m < m ? n - m * m : m;
+  const b = n - m * m < m ? m         : n - m * m - m;
+  return { q: _natToInt(a), r: _natToInt(b) };
+}
+
 
 export { Match, MatchNode };

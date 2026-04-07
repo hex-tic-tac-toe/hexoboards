@@ -298,7 +298,7 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
 #match-board-svg { display:block; }
 #match-board-svg .cell-group { pointer-events: all; cursor: pointer; }
 
-#match-tree-panel { position:absolute; top:var(--header-h); right:0; width:260px; bottom:0; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; }
+
 .tree-panel-resize { width:6px; cursor:col-resize; background:transparent; position:absolute; left:0; top:0; bottom:0; z-index:10; }
 .tree-panel-resize:hover { background:var(--accent); opacity:0.3; }
 .tree-panel-head { padding:10px 12px; font-size:10px; color:var(--muted); letter-spacing:.12em; text-transform:uppercase; border-bottom:1px solid var(--border); flex-shrink:0; padding-left:16px; }
@@ -461,5 +461,32 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
 
 /* ── Match toolbar: selection mode active ────────────────────────────────── */
 #btn-match-select.active { color: var(--text); border-color: var(--border-hi); background: rgba(255,255,255,.06); }
-#btn-extract-selection, #btn-clear-selection { font-size: 10px; }
+
 .match-sel-info { font-size: 10px; color: var(--muted); letter-spacing: .06em; font-style: italic; }
+
+
+/* ── Match tree panel: notation footer ──────────────────────────────────────── */
+#match-tree-panel {
+  position: absolute; top: var(--header-h); right: 0; width: 260px; bottom: 0;
+  background: var(--surface); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+.match-notation-panel {
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.match-notation-hdr {
+  display: flex; align-items: center; gap: 5px; padding: 4px 8px;
+  font-size: 9px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase;
+}
+.match-notation-label { flex: 1; }
+.match-notation-hdr .btn { font-size: 9px; padding: 2px 8px; }
+.match-notation-ta {
+  font-family: var(--font); font-size: 11px; line-height: 1.6;
+  background: var(--bg); color: var(--text);
+  border: none; border-top: 1px solid var(--border);
+  padding: 7px 10px; resize: vertical;
+  min-height: 68px; max-height: 180px; width: 100%;
+  outline: none; display: block;
+}
+.match-notation-ta:focus { border-top-color: var(--accent-dim); }

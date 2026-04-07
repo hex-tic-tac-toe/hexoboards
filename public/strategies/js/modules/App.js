@@ -310,6 +310,17 @@ const App = {
     }
 
     // Match toolbar — snapshot current board to editor
+    // Match notation panel
+    document.getElementById('btn-match-notation-copy').addEventListener('click', () => {
+      const text = Match.toHextic();
+      if (text) App._copy(text); else App._toast('nothing to copy');
+    });
+    document.getElementById('btn-match-notation-load').addEventListener('click', () => {
+      const text = document.getElementById('match-notation-ta').value.trim();
+      if (!Match.fromHextic(text)) App._toast('invalid notation');
+    });
+
+    // Match toolbar — snapshot current board to editor
     document.getElementById('btn-match-snapshot').addEventListener('click', () => {
       const grid = Match.currentBoardAsGrid();
       Editor.loadGrid(grid);
