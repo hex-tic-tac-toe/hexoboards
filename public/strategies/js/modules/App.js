@@ -175,7 +175,18 @@ const App = {
       App._toast('library loaded');
     } else if (tab === 'editor' && (data.type === 'hexoboards-board' || data.board)) {
       const grid = URLCodec.decode(data.board);
-      if (grid) { Editor.loadGrid(grid); UI.showEditor(() => Editor._buildBoard()); App._toast('board loaded'); }
+      if (grid) {
+        Editor.loadGrid(grid);
+        if (data.labels) {
+          Editor.labels = data.labels.map(l => ({ q: l[0], r: l[1], mark: l[2] }));
+          Editor.noteOpen = Editor.labels.length > 0;
+        }
+        if (data.title) Editor.title = data.title;
+        if (data.note) Editor.note = data.note;
+        Editor._syncPanels();
+        UI.showEditor(() => Editor._buildBoard());
+        App._toast('board loaded');
+      }
     } else if (tab === 'match') {
       let loaded = false;
       // Compact format (hextic notation wrapped in JSON)
