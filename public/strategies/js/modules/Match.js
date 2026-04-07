@@ -96,6 +96,10 @@ const Match = {
   _botRunning:    false, // prevent re-entrant bot placement
   _currentBotId:  null,  // bot currently placing (null = human)
 
+  // Player names (from Hexo import)
+  playerX: null,
+  playerO: null,
+
   // Panel visibility — mirrors Editor.noteOpen / notationOpen pattern
   playOpen: true,
   noteOpen: false,
@@ -488,8 +492,15 @@ const Match = {
 
       const content = document.createElement('span');
       content.className   = 'tree-node-content';
-      content.textContent = node.lastMove
-        ? `${node.lastMove.state === 1 ? 'X' : 'O'} ${node.turn}` : 'start';
+      if (node.lastMove) {
+        const playerLabel = node.lastMove.state === 1 ? 'X' : 'O';
+        const playerName = node.lastMove.playerName;
+        content.textContent = playerName
+          ? `${playerLabel} ${node.turn} (${playerName})`
+          : `${playerLabel} ${node.turn}`;
+      } else {
+        content.textContent = 'start';
+      }
       line.appendChild(content);
 
       if (node.lastMove) {
@@ -973,8 +984,10 @@ const Match = {
   /**
    * Deserialize a hextic clipboard string and replace the current tree.
    * Returns true on success, false if the format is unrecognised.
+   * @param {string} text - The hextic notation string
+   * @param {Array} players - Optional array of player objects from Hexo import
    */
-  fromHextic(text) {
+  fromHextic(text, players = null) {
     if (!text?.trim()) return false;
 
     let treeText = text, focusIndex = -1;
@@ -992,10 +1005,16 @@ const Match = {
     // Check if array contains [q,r] pairs (axial format) instead of natural numbers
     const isAxialFormat = data.length > 0 && Array.isArray(data[0]) && data[0].length === 2;
 
+    // Store player info for tree display
+    const playerX = players?.find(p => p.playerId === 1 || p.playerId === '1')?.displayName || null;
+    const playerO = players?.find(p => p.playerId === 2 || p.playerId === '2')?.displayName || null;
+
     // Rebuild tree using the same algorithm as hextic's processSerializedArray
     MatchNode.resetId();
     Match.tree = MatchNode.create({ turn: 0 });
     Match._collapsedChildren.clear();
+    Match.playerX = playerX;
+    Match.playerO = playerO;
     const cursor = { node: Match.tree };
 
     function processArray(arr) {
@@ -1004,14 +1023,20 @@ const Match = {
           const { q, r } = _natToHex(item);
           const t     = cursor.node.turn;
           const state = (t % 4 === 0 || t % 4 === 3) ? 1 : 2;
+          const playerName = state === 1 ? playerX : playerO;
           const cells = new Map(Array.from(cursor.node.grid.cells, ([k, c]) => [k, { ...c }]));
           cells.set(HexGrid.key(q, r), { q, r, state, legal: false });
           const newNode = MatchNode.create({
             parent:   cursor.node,
             turn:     t + 1,
             grid:     { cells },
-            lastMove: { q, r, state, turn: t },
+            lastMove: { q, r, state, turn: t, playerName },
           });
+          const win = WinDetector.check(q, r, state, cells);
+          if (win) {
+            newNode.isWin = true;
+            newNode.winRun = new Set(win.map(c => HexGrid.key(c.q, c.r)));
+          }
           cursor.node.children.push(newNode);
           cursor.node = newNode;
         } else if (Array.isArray(item) && item.length === 2 && typeof item[0] === 'number') {
@@ -1019,14 +1044,20 @@ const Match = {
           const q = item[0], r = item[1];
           const t     = cursor.node.turn;
           const state = (t % 4 === 0 || t % 4 === 3) ? 1 : 2;
+          const playerName = state === 1 ? playerX : playerO;
           const cells = new Map(Array.from(cursor.node.grid.cells, ([k, c]) => [k, { ...c }]));
           cells.set(HexGrid.key(q, r), { q, r, state, legal: false });
           const newNode = MatchNode.create({
             parent:   cursor.node,
             turn:     t + 1,
             grid:     { cells },
-            lastMove: { q, r, state, turn: t },
+            lastMove: { q, r, state, turn: t, playerName },
           });
+          const win = WinDetector.check(q, r, state, cells);
+          if (win) {
+            newNode.isWin = true;
+            newNode.winRun = new Set(win.map(c => HexGrid.key(c.q, c.r)));
+          }
           cursor.node.children.push(newNode);
           cursor.node = newNode;
         } else if (Array.isArray(item)) {
@@ -1045,6 +1076,9 @@ const Match = {
     Match.currentNode = (focusIndex >= 0 && focusIndex < positions.length)
       ? positions[focusIndex]
       : Match.tree;
+
+    // Sync winCells from current node
+    Match.winCells = Match.currentNode.isWin ? Match.currentNode.winRun : null;
 
     Match._boardActive = true;
     if (!Match.createdAt) Match.createdAt = Date.now();
@@ -1179,6 +1213,8 @@ const Match = {
     document.addEventListener('wheel', e=>{
       if (document.getElementById('view-match').hidden||!canPanZoom()) return;
       if (e.target.closest('#match-tree-content')) return;
+      if (e.target.closest('#hexo-recent-list')) return;
+      if (!document.getElementById('match-import-modal')?.hidden) return;
       e.preventDefault();
       const oldZ=Match.viewZoom, rect=area.getBoundingClientRect();
       const mx=e.clientX-rect.left, my=e.clientY-rect.top, cx=rect.width/2, cy=rect.height/2;

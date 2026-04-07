@@ -38,11 +38,11 @@ const GameImport = {
       const res = await fetch(`/api/hexo/games?id=${encodeURIComponent(gameId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
-      const moves = GameImport.parseMovesFromHtml(text);
+      const { moves, players } = GameImport.parseMovesFromHtml(text);
       if (moves.length === 0) {
         throw new Error('No moves found in game page');
       }
-      return moves;
+      return { moves, players };
     } catch (e) {
       GameImport.error = e.message;
       return null;
@@ -51,6 +51,7 @@ const GameImport = {
 
   parseMovesFromHtml(html) {
     const moves = [];
+    let players = null;
     
     // Try JSON data in script tags (React apps often embed state this way)
     const scriptMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
@@ -59,6 +60,9 @@ const GameImport = {
         const data = JSON.parse(scriptMatch[1]);
         const props = data.props?.pageProps || data.props || {};
         const gameData = props.game || props.initialGameState || props.gameState;
+        if (gameData?.players) {
+          players = gameData.players;
+        }
         if (gameData?.moves) {
           for (const m of gameData.moves) {
             moves.push({ q: m.q ?? m.x ?? m.column, r: m.r ?? m.y ?? m.row });
@@ -69,7 +73,7 @@ const GameImport = {
             moves.push({ q: m.q ?? m.x, r: m.r ?? m.y });
           }
         }
-        if (moves.length > 0) return moves;
+        if (moves.length > 0) return { moves, players };
       } catch (e) { console.log('JSON parse failed', e.message); }
     }
     
@@ -78,12 +82,15 @@ const GameImport = {
     if (windowMatch) {
       try {
         const data = JSON.parse(windowMatch[2]);
+        if (data.players) {
+          players = data.players;
+        }
         if (data.moves) {
           for (const m of data.moves) {
             moves.push({ q: m.q ?? m.x, r: m.r ?? m.y });
           }
         }
-        if (moves.length > 0) return moves;
+        if (moves.length > 0) return { moves, players };
       } catch (e) {}
     }
     
@@ -95,7 +102,7 @@ const GameImport = {
         for (const m of movesArr) {
           moves.push({ q: m.q ?? m.x, r: m.r ?? m.y });
         }
-        if (moves.length > 0) return moves;
+        if (moves.length > 0) return { moves, players };
       } catch (e) {}
     }
     
@@ -108,7 +115,7 @@ const GameImport = {
       moves.push({ q, r });
     }
     
-    return moves;
+    return { moves, players };
   },
 
   movesToHextic(moves) {
@@ -134,10 +141,11 @@ const GameImport = {
     GameImport.loading = true;
     GameImport.error = null;
     try {
-      const moves = await GameImport.fetchGameMoves(gameId);
-      if (!moves || moves.length === 0) {
+      const result = await GameImport.fetchGameMoves(gameId);
+      if (!result || !result.moves || result.moves.length === 0) {
         throw new Error('No moves found');
       }
+      const { moves, players } = result;
       // Skip duplicates (same position appears twice in HTML - once in timeline, once in current step)
       const uniqueMoves = [];
       for (const m of moves) {
@@ -149,7 +157,7 @@ const GameImport = {
       const hextic = GameImport.movesToHextic(uniqueMoves);
       GameImport.loading = false;
       if (GameImport.onImport) {
-        GameImport.onImport(hextic, gameId);
+        GameImport.onImport(hextic, gameId, players);
       }
       return hextic;
     } catch (e) {
