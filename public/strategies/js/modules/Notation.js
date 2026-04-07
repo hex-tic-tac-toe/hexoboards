@@ -198,14 +198,6 @@ const Notation = {
   gridToFmt: (grid, fmtId) => Notation.FORMATS[fmtId]?.encode(grid) ?? '',
   gridFromFmt: (text, fmtId) => Notation.FORMATS[fmtId]?.decode(text) ?? null,
 
-  // Convenience aliases kept for external callers
-  gridToBKE:   encodeBKE,
-  gridToHTN:   encodeHTN,
-  gridToAxial: encodeAxial,
-  fromBKE:     decodeBKE,
-  fromHTN:     decodeHTN,
-  fromAxial:   decodeAxial,
-
   /**
    * Canonical import entry point — resolve a Source and decode with its format.
    * Returns the decoded grid, or null on any failure.
