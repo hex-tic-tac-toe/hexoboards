@@ -1,4 +1,4 @@
-import { HexGrid } from '/strategies/js/modules/HexGrid.js';
+import { HexGrid } from './HexGrid.js';
 
 const HTN = {
 

@@ -2,12 +2,16 @@
   "name": "hexoboards",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Cloudflare Wrangler app for hexoboards.com",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --env=\"\"",
     "deploy:staging": "wrangler deploy --env staging",
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js",
+    "test": "node scripts/run-tests.mjs",
+    "test:share": "node scripts/test-share.mjs",
+    "test:unit": "node scripts/run-tests.mjs"
   },
   "engines": {
     "node": ">=20"

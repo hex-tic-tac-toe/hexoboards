@@ -1,9 +1,9 @@
-import { Doc }           from '/strategies/js/modules/Doc.js';
-import { Store }         from '/strategies/js/modules/Store.js';
-import { Markdown }      from '/strategies/js/modules/Markdown.js';
-import { URLCodec }      from '/strategies/js/modules/URLCodec.js';
-import { BoardRenderer } from '/strategies/js/modules/BoardRenderer.js';
-import { HexGrid }       from '/strategies/js/modules/HexGrid.js';
+import { Doc }           from './Doc.js';
+import { Store }         from './Store.js';
+import { Markdown }      from './Markdown.js';
+import { URLCodec }      from './URLCodec.js';
+import { BoardRenderer } from './BoardRenderer.js';
+import { HexGrid }       from './HexGrid.js';
 
 const Browser = {
   activeLibId:   null,
@@ -13,7 +13,10 @@ const Browser = {
   insertContext: null,
   _activeSec:    null,
 
-  init(onOpenPosition) { Browser._onOpen = onOpenPosition; },
+  init(onOpenPosition, onOpenInMatch) {
+    Browser._onOpen        = onOpenPosition;
+    Browser._onOpenInMatch = onOpenInMatch || null;
+  },
 
   render(libId, noHashUpdate) {
     Browser.activeLibId = libId;
@@ -27,7 +30,10 @@ const Browser = {
 
   scrollToSection(secId) {
     const el = document.getElementById('dn-' + secId);
-    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); history.replaceState(null, '', '#b/' + Browser.activeLibId + '/' + secId); }
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      history.replaceState(null, '', '#b/' + Browser.activeLibId + '/' + secId);
+    }
   },
 
   setAllCollapsed(collapsed) {
@@ -83,10 +89,16 @@ const Browser = {
     main.classList.toggle('browser-editable', Browser._editable);
     if (!Browser.activeLibId || !Browser._doc.length) {
       const msg = document.createElement('div');
-      msg.className = 'browser-empty';
-      msg.textContent = Browser.activeLibId ? (Browser._editable ? 'Empty — use + buttons to add content.' : 'Empty library.') : 'Select a library.';
+      msg.className   = 'browser-empty';
+      msg.textContent = Browser.activeLibId
+        ? (Browser._editable ? 'Empty — use + buttons to add content.' : 'Empty library.')
+        : 'Select a library.';
       main.appendChild(msg);
-      if (Browser._editable && Browser.activeLibId) { const bar = Browser._addBar(Browser._doc, 0); bar.classList.add('always-visible'); main.appendChild(bar); }
+      if (Browser._editable && Browser.activeLibId) {
+        const bar = Browser._addBar(Browser._doc, 0);
+        bar.classList.add('always-visible');
+        main.appendChild(bar);
+      }
       return;
     }
     Browser._renderNodes(main, Browser._doc);
@@ -108,6 +120,7 @@ const Browser = {
     if (node.type === 's') Browser._buildSection(el, node);
     else if (node.type === 't') Browser._buildText(el, node);
     else if (node.type === 'p') Browser._buildPos(el, node);
+    else if (node.type === 'm') Browser._buildMatch(el, node);
     if (Browser._editable) Browser._attachDrag(el, node);
     return el;
   },
@@ -125,7 +138,10 @@ const Browser = {
     }
     hdr.appendChild(btn); hdr.appendChild(ttl);
 
-    const linkBtn = document.createElement('button'); linkBtn.className = 'sec-link-btn'; linkBtn.textContent = '🔗'; linkBtn.title = 'Copy link to section';
+    const linkBtn = document.createElement('button');
+    linkBtn.className   = 'sec-link-btn';
+    linkBtn.textContent = '🔗';
+    linkBtn.title       = 'Copy link to section';
     linkBtn.addEventListener('click', e => {
       e.stopPropagation();
       const url = location.origin + location.pathname + '#b/' + Browser.activeLibId + '/' + node.id;
@@ -140,19 +156,26 @@ const Browser = {
       act.appendChild(Browser._btn('+section', () => { node.children.push(Doc.section()); Browser._save(); Browser._renderDoc(); Browser._renderNav(); }));
       act.appendChild(Browser._btn('+text',    () => { node.children.push(Doc.text());    Browser._save(); Browser._renderDoc(); }));
       act.appendChild(Browser._btn('+pos',     () => { Browser.insertContext = { list: node.children, idx: node.children.length }; Browser._onOpen?.(null); }));
-      const del = Browser._btn('✕', () => { if (!confirm('Delete section and contents?')) return; Doc.remove(Browser._doc, node.id); Browser._save(); Browser._renderDoc(); Browser._renderNav(); });
+      const del = Browser._btn('✕', () => {
+        if (!confirm('Delete section and contents?')) return;
+        Doc.remove(Browser._doc, node.id); Browser._save(); Browser._renderDoc(); Browser._renderNav();
+      });
       del.style.marginLeft = 'auto';
       act.appendChild(del); hdr.appendChild(act);
     }
     el.appendChild(hdr);
+
     const body = document.createElement('div');
     body.className = 'doc-sec-body';
     body.hidden = !!node.collapsed;
     node.children = node.children || [];
     Browser._renderNodes(body, node.children);
     el.appendChild(body);
+
     const toggleCollapse = () => {
-      node.collapsed = !node.collapsed; btn.textContent = node.collapsed ? '▸' : '▾'; body.hidden = !!node.collapsed;
+      node.collapsed = !node.collapsed;
+      btn.textContent = node.collapsed ? '▸' : '▾';
+      body.hidden = !!node.collapsed;
       if (Browser._editable) Browser._save();
       Browser._renderNav();
     };
@@ -172,7 +195,11 @@ const Browser = {
     const raw = document.createElement('pre'); raw.className = 'md-raw'; raw.hidden = true;
     raw.textContent = node.md || '';
     if (monoActive) { view.hidden = true; raw.hidden = false; }
-    const monoBtn = document.createElement('button'); monoBtn.className = 'mono-toggle'; monoBtn.textContent = '{ }'; monoBtn.title = 'Toggle monospace view';
+
+    const monoBtn = document.createElement('button');
+    monoBtn.className = 'mono-toggle';
+    monoBtn.textContent = '{ }';
+    monoBtn.title = 'Toggle monospace view';
     monoBtn.classList.toggle('active', monoActive);
     monoBtn.addEventListener('click', e => {
       e.stopPropagation(); monoActive = !monoActive; node.mono = monoActive;
@@ -182,8 +209,10 @@ const Browser = {
       Browser._save();
     });
     el.appendChild(monoBtn); el.appendChild(view); el.appendChild(raw);
+
     if (Browser._editable) {
-      const ta = document.createElement('textarea'); ta.className = 'doc-text-ta'; ta.value = node.md || ''; ta.hidden = true; ta.placeholder = 'Markdown…';
+      const ta = document.createElement('textarea');
+      ta.className = 'doc-text-ta'; ta.value = node.md || ''; ta.hidden = true; ta.placeholder = 'Markdown…';
       const autosize = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
       const openEdit = () => { view.hidden = true; raw.hidden = true; ta.hidden = false; autosize(); ta.focus({ preventScroll: true }); };
       view.addEventListener('click', openEdit);
@@ -198,109 +227,152 @@ const Browser = {
       });
       ta.addEventListener('keydown', e => { if (e.key === 'Escape') ta.blur(); });
       const del = Browser._btn('✕', () => { Doc.remove(Browser._doc, node.id); Browser._save(); Browser._renderDoc(); });
-      del.className += ' node-del-btn';
+      del.style.marginLeft = 'auto';
       el.appendChild(ta); el.appendChild(del);
     }
   },
 
   _buildPos(el, node) {
-    const grid = URLCodec.decode(node.board); if (!grid) return;
-    if (Browser._editable) { const h = Browser._el('span','drag-handle','⠿'); el.appendChild(h); }
-    el.tabIndex = 0;
-    el.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { Browser._onOpen?.(node); return; }
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); Browser._focusNextCard(el, 1); }
-      if (e.key === 'ArrowUp'   || e.key === 'ArrowLeft')  { e.preventDefault(); Browser._focusNextCard(el, -1); }
-    });
-    const board = document.createElement('div'); board.className = 'card-board';
-    const svg   = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); board.appendChild(svg);
-    const labels = (node.labels || []).map(l => Array.isArray(l) ? { q:l[0], r:l[1], mark:l[2] } : { ...l, mark: l.mark??l.letter??'a' });
-    BoardRenderer.build(svg, grid, labels, { w:220, h:180, margin:8, mini:true, hover:false });
-    const meta = document.createElement('div'); meta.className = 'card-meta';
-    if (node.title) meta.appendChild(Browser._el('div','card-title',node.title));
-    if (node.note)  meta.appendChild(Browser._el('div','card-note',node.note.split('\n')[0]));
-    const { x, o } = HexGrid.countStones(grid);
-    meta.appendChild(Browser._el('div', 'card-stats', `X ${x}  O ${o}  s${grid.s}`));
+    // Board thumbnail — uses card-board class to match CSS layout
+    const boardWrap = document.createElement('div'); boardWrap.className = 'card-board';
+    const grid      = URLCodec.decode(node.board);
+    if (grid) {
+      const svg    = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const labels = (node.labels || []).map(l =>
+        Array.isArray(l) ? { q: l[0], r: l[1], mark: l[2] } : { ...l, mark: l.mark ?? l.letter ?? 'a' });
+      BoardRenderer.build(svg, grid, labels, { w: 220, h: 180, margin: 16, hover: false });
+      boardWrap.appendChild(svg);
+    }
+
+    // Drag handle before board (editable only)
     if (Browser._editable) {
-      const act = document.createElement('div'); act.className = 'card-actions';
-      act.appendChild(Browser._btn('✕ delete', () => { if (!confirm(`Delete "${node.title||node.board}"?`)) return; Doc.remove(Browser._doc,node.id); Browser._save(); Browser._renderDoc(); }));
-      meta.appendChild(act);
+      const h = Browser._el('span', 'drag-handle', '⠿'); h.draggable = false;
+      el.appendChild(h);
     }
-    el.appendChild(board); el.appendChild(meta);
-    board.addEventListener('click', () => Browser._onOpen?.(node));
-  },
+    el.appendChild(boardWrap);
 
-  _focusNextCard(current, dir) {
-    const cards = [...document.querySelectorAll('.doc-p[tabindex="0"]')];
-    const idx   = cards.indexOf(current);
-    const next  = cards[idx + dir];
-    if (next) next.focus({ preventScroll: false });
-  },
-
-  _applySearch(q) {
-    const query = q.toLowerCase().trim();
-    const btn   = document.getElementById('btn-search-clear');
-    if (btn) btn.hidden = !q;
-
-    if (!query) {
-      document.querySelectorAll('#browser-doc .doc-node').forEach(el => el.hidden = false);
-      return;
+    // Metadata column
+    const meta = document.createElement('div'); meta.className = 'card-meta';
+    if (node.title) meta.appendChild(Browser._el('div', 'card-title', node.title));
+    if (node.note) {
+      const n = document.createElement('div'); n.className = 'card-note md-body';
+      n.innerHTML = Markdown.render(node.note); meta.appendChild(n);
     }
 
-    const nodeMatches = node => {
-      if (node.type === 't') return (node.md||'').toLowerCase().includes(query);
-      if (node.type === 'p') return ((node.title||'') + ' ' + (node.note||'')).toLowerCase().includes(query);
-      if (node.type === 's') return (node.title||'').toLowerCase().includes(query) || (node.children||[]).some(c => nodeMatches(c));
-      return false;
-    };
-
-    const applyNode = (node, parentTitleMatch) => {
-      const el = document.getElementById('dn-' + node.id);
-      if (!el) return;
-      if (node.type === 's') {
-        const titleMatch = (node.title||'').toLowerCase().includes(query);
-        const anyMatch   = nodeMatches(node);
-        el.hidden = !anyMatch;
-        if (anyMatch) (node.children||[]).forEach(c => applyNode(c, titleMatch || parentTitleMatch));
-      } else {
-        el.hidden = parentTitleMatch ? false : !nodeMatches(node);
-      }
-    };
-
-    Browser._doc.forEach(node => applyNode(node, false));
-  },
-
-  _addBar(list, insertIdx) {
-    const bar = document.createElement('div'); bar.className = 'doc-add-bar';
-    bar.appendChild(Browser._btn('+ section', () => { list.splice(insertIdx, 0, Doc.section()); Browser._save(); Browser._renderDoc(); Browser._renderNav(); }));
-    bar.appendChild(Browser._btn('+ text',    () => { list.splice(insertIdx, 0, Doc.text());    Browser._save(); Browser._renderDoc(); }));
-    return bar;
-  },
-
-  _attachDrag(el, node) {
-    const handle = el.querySelector('.drag-handle');
-    if (handle) {
-      handle.draggable = true;
-      handle.addEventListener('dragstart', e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', node.id); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => el.classList.add('dragging'), 0); });
+    const acts = document.createElement('div'); acts.className = 'card-actions';
+    acts.appendChild(Browser._btn('open', () => Browser._onOpen?.(node)));
+    // If the entry has hextic notation it was saved from Match — offer to restore it
+    if (node.htn && Browser._onOpenInMatch) {
+      const matchBtn = Browser._btn('→ match', () => Browser._onOpenInMatch?.(node));
+      matchBtn.className += ' card-match-btn';
+      acts.appendChild(matchBtn);
     }
-    el.addEventListener('dragend',   () => el.classList.remove('dragging', 'drag-over'));
-    el.addEventListener('dragover',  e => { e.preventDefault(); e.stopPropagation(); el.classList.add('drag-over'); });
-    el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over'); });
-    el.addEventListener('drop', e => {
-      e.preventDefault(); e.stopPropagation();
-      el.classList.remove('drag-over');
-      const fromId = e.dataTransfer.getData('text/plain'); if (fromId === node.id) return;
-      const before = e.clientY < el.getBoundingClientRect().top + el.offsetHeight / 2;
-      Doc.move(Browser._doc, fromId, node.id, before);
-      Browser._save(); Browser._renderDoc();
+    if (Browser._editable) {
+      acts.appendChild(Browser._btn('edit', () => Browser._onOpen?.(node)));
+      acts.appendChild(Browser._btn('\u2715', () => {
+        if (!confirm('Delete position?')) return;
+        Doc.remove(Browser._doc, node.id); Browser._save(); Browser._renderDoc();
+      }));
+    }
+    meta.appendChild(acts);
+    el.appendChild(meta);
+    el.addEventListener('dblclick', () => Browser._onOpen?.(node));
+  },
+
+  /** Render a saved match game entry — compact list row with date, move count, actions. */
+  _buildMatch(el, node) {
+    el.className += ' match-card';
+
+    const info = document.createElement('div'); info.className = 'match-card-info';
+
+    const titleEl = document.createElement('div'); titleEl.className = 'match-card-title';
+    titleEl.textContent = node.title || 'Untitled match';
+    info.appendChild(titleEl);
+
+    const meta = document.createElement('div'); meta.className = 'match-card-meta';
+    const date = new Date(node.createdAt || node.savedAt || 0);
+    const dateStr = date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    // Count moves from notation (number of integers at top level)
+    let moveCount = 0;
+    try {
+      const semi = node.notation.indexOf(';');
+      const arr = JSON.parse(semi > 0 ? node.notation.slice(0, semi) : node.notation);
+      moveCount = (function count(a) { return a.reduce((s,i) => s + (typeof i==='number' ? 1 : count(i)), 0); })(arr);
+    } catch {}
+    meta.textContent = `${dateStr}  ·  ${moveCount} move${moveCount !== 1 ? 's' : ''}`;
+    if (node.note) {
+      const noteEl = document.createElement('div'); noteEl.className = 'match-card-note';
+      noteEl.textContent = node.note.slice(0, 120);
+      info.appendChild(noteEl);
+    }
+    info.appendChild(meta);
+
+    const acts = document.createElement('div'); acts.className = 'card-actions match-card-acts';
+    if (Browser._onOpenInMatch) {
+      acts.appendChild(Browser._btn('open', () => Browser._onOpenInMatch?.(node)));
+    }
+    if (Browser._editable) {
+      acts.appendChild(Browser._btn('✕', () => {
+        if (!confirm('Delete match?')) return;
+        Doc.remove(Browser._doc, node.id); Browser._save(); Browser._renderDoc();
+      }));
+    }
+
+    el.appendChild(info);
+    el.appendChild(acts);
+    el.addEventListener('dblclick', () => Browser._onOpenInMatch?.(node));
+  },
+
+  _applySearch(query) {
+    const q = query.toLowerCase().trim();
+    document.getElementById('btn-search-clear').hidden = !q;
+    const nodes = document.querySelectorAll('#browser-doc .doc-node');
+    nodes.forEach(el => {
+      if (!q) { el.style.display = ''; return; }
+      const text = el.textContent.toLowerCase();
+      el.style.display = text.includes(q) ? '' : 'none';
     });
   },
 
   _save() { Store.saveDoc(Browser.activeLibId, Browser._doc); },
-  _el(tag, cls, text) { const e = document.createElement(tag); e.className = cls; e.textContent = text; return e; },
-  _btn(text, onClick) {
-    const b = document.createElement('button'); b.className = 'btn'; b.textContent = text;
-    b.addEventListener('click', e => { e.stopPropagation(); onClick(); }); return b;
+
+  _addBar(list, idx) {
+    const bar = document.createElement('div'); bar.className = 'add-bar';
+    const add = (label, fn) => { const b = Browser._btn(label, fn); bar.appendChild(b); };
+    add('+section', () => { list.splice(idx, 0, Doc.section()); Browser._save(); Browser._renderDoc(); Browser._renderNav(); });
+    add('+text',    () => { list.splice(idx, 0, Doc.text());    Browser._save(); Browser._renderDoc(); });
+    add('+pos',     () => { Browser.insertContext = { list, idx }; Browser._onOpen?.(null); });
+    return bar;
+  },
+
+  _attachDrag(el, node) {
+    el.draggable = true;
+    el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', node.id); el.classList.add('dragging'); });
+    el.addEventListener('dragend',   () => el.classList.remove('dragging'));
+    el.addEventListener('dragover',  e => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault(); el.classList.remove('drag-over');
+      const fromId = e.dataTransfer.getData('text/plain');
+      if (fromId === node.id) return;
+      Doc.move(Browser._doc, fromId, node.id);
+      Browser._save(); Browser._renderDoc(); Browser._renderNav();
+    });
+  },
+
+  _el(tag, cls, text) {
+    const el = document.createElement(tag);
+    el.className   = cls;
+    el.textContent = text;
+    return el;
+  },
+
+  _btn(label, fn) {
+    const b = document.createElement('button');
+    b.className   = 'btn';
+    b.textContent = label;
+    b.addEventListener('click', e => { e.stopPropagation(); fn(); });
+    return b;
   },
 };
 

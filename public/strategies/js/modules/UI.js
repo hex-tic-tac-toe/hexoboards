@@ -1,34 +1,79 @@
-import { Layout } from '/strategies/js/modules/Layout.js';
+/**
+ * UI — view switching and tab strip management.
+ *
+ * VIEWS is the single source of truth for all tabs.
+ * init() builds every .tab-strip element in the DOM from this config,
+ * eliminating the N×M matrix of hand-written tab button IDs.
+ *
+ * Hash mapping:  editor='' | match='m' | browser=(libId) | data='d' | convert='c'
+ * Backward compat: hash '#a' is treated as '#m' (old analyze link).
+ */
+import { Layout } from './Layout.js';
+
+// Tab configuration — label and URL hash fragment for each view.
+// Adding a new view means adding one entry here plus a matching #view-* element.
+const VIEWS = [
+  { id: 'match',   label: 'Match',     hash: 'm'  },
+  { id: 'editor',  label: 'Editor',    hash: ''   },
+  { id: 'browser', label: 'Browser',   hash: null },  // hash managed separately (includes libId)
+  { id: 'data',    label: 'Libraries', hash: 'd'  },
+  { id: 'convert', label: 'Convert',   hash: 'c'  },
+];
 
 const UI = {
   activeView: 'editor',
+  VIEWS,
 
-  init(onResize) {
-    window.addEventListener('resize', () => { if (UI.activeView === 'editor') onResize(); });
+  /**
+   * Build all tab strips and wire up resize handler.
+   * callbacks: { editor, match, browser, data, convert } → functions called on tab click
+   */
+  init(callbacks) {
+    document.querySelectorAll('.tab-strip').forEach(strip => {
+      VIEWS.forEach(({ id, label }) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.dataset.tabView = id;
+        btn.textContent = label;
+        btn.addEventListener('click', () => callbacks[id]?.());
+        strip.appendChild(btn);
+      });
+      const theme = document.createElement('button');
+      theme.className = 'btn btn-theme';
+      theme.dataset.tip = 'Toggle theme (dark only)';
+      theme.textContent = '☾';
+      strip.appendChild(theme);
+    });
+
+    window.addEventListener('resize', () => {
+      if (UI.activeView === 'editor') callbacks.editor?.();
+    });
   },
 
-  showEditor(onEnter)   { UI._show('editor',  onEnter, 'tab-editor',   'tab-editor-b',   'tab-editor-d',   'tab-editor-c'); },
-  showBrowser(onEnter)  { UI._show('browser', onEnter, 'tab-browser',  'tab-browser-b',  'tab-browser-d',  'tab-browser-c'); },
-  showData(onEnter)     { UI._show('data',    onEnter, 'tab-data',     'tab-data-b',     'tab-data-d',     'tab-data-c'); },
-  showConvert(onEnter)  { UI._show('convert', onEnter, 'tab-convert',  'tab-convert-b',  'tab-convert-d',  'tab-convert-c'); },
+  showEditor(onEnter)  { UI._show('editor',  onEnter, ''); },
+  showMatch(onEnter)   { UI._show('match',   onEnter, 'm'); },
+  showBrowser(onEnter) { UI._show('browser', onEnter, null); },   // caller updates hash
+  showData(onEnter)    { UI._show('data',    onEnter, 'd'); },
+  showConvert(onEnter) { UI._show('convert', onEnter, 'c'); },
 
-  _show(view, onEnter, ...activeIds) {
+  _show(view, onEnter, hash) {
     UI.activeView = view;
-    for (const v of ['editor', 'browser', 'data', 'convert'])
-      document.getElementById('view-' + v).hidden = v !== view;
-    const all = [
-      'tab-editor','tab-editor-b','tab-editor-d','tab-editor-c',
-      'tab-browser','tab-browser-b','tab-browser-d','tab-browser-c',
-      'tab-data','tab-data-b','tab-data-d','tab-data-c',
-      'tab-convert','tab-convert-b','tab-convert-d','tab-convert-c',
-    ];
-    for (const id of all) document.getElementById(id)?.classList.toggle('active', activeIds.includes(id));
-    const hashMap = { browser: null, data: 'd', convert: 'c' };
-    if (view in hashMap) {
-      if (hashMap[view]) history.replaceState(null, '', '#' + hashMap[view]);
-    } else {
-      history.replaceState(null, '', location.pathname + location.search);
+
+    // Toggle visibility of each full-page view div
+    VIEWS.forEach(({ id }) => {
+      document.getElementById('view-' + id).hidden = id !== view;
+    });
+
+    // Mark active tab in every strip (strips live inside each view header)
+    document.querySelectorAll('[data-tab-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tabView === view);
+    });
+
+    // Update the URL hash without pushing a history entry
+    if (hash !== null) {
+      history.replaceState(null, '', hash ? '#' + hash : location.pathname + location.search);
     }
+
     onEnter();
   },
 };
