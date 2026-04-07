@@ -145,53 +145,6 @@ This document contains scraped data from the Hexo (Infinity Hexagonal Tic-Tac-To
 3. **Won by surrender** - Player resigned
 4. **Won by disconnect** - Opponent disconnected
 
-### Sample Recent Games (Page 1)
-
-| Session ID | Result | Rated | Moves | Player 1 | Player 2 | Duration | Date |
-|------------|--------|-------|-------|----------|----------|----------|------|
-| nqdp05 | Won by six in a row | No | 37 | chaoticish | Guest C0F2 | 3m 7s | 7 Apr 2026, 20:46 |
-| 8s53d3 | Won by six in a row | No | 19 | Guest 8080 | Guest F92B | 42s | 7 Apr 2026, 20:45 |
-| bk6q9u | Won by six in a row | No | 11 | Guest BD9F | Guest 2AD2 | 33s | 7 Apr 2026, 20:45 |
-| m32hhu | Won on time | Yes | 80 | novachr13 | crandivas_51156 | 10m 12s | 7 Apr 2026, 20:43 |
-| a4spw2 | Won by six in a row | Yes | 55 | kiwitou | .thatscrispy | 7m 55s | 7 Apr 2026, 20:41 |
-| d27lsw | Won by six in a row | No | 103 | Guest BC60 | buildoro | 10m 15s | 7 Apr 2026, 20:38 |
-| mcggnz | Won by six in a row | No | 97 | finneon7 | yellow_warning | 19m 48s | 7 Apr 2026, 20:36 |
-| dzeb7q | Won by six in a row | No | 147 | Guest 9026 | Guest 87BF | 14m 47s | 7 Apr 2026, 20:28 |
-| le6zl1 | Won by disconnect | No | 47 | Guest 8D73 | Guest 8BC7 | 11m 31s | 7 Apr 2026, 20:16 |
-| g6mlfi | Won by six in a row | No | 99 | kirojoy | ketari | 4m 29s | 7 Apr 2026, 20:05 |
-| 5flpbs | Won by surrender | No | 0 | noobnoobastico | saphsicles | 5s | 7 Apr 2026, 20:05 |
-
-### Notable Players in Recent Games
-
-**Registered Players:**
-- chaoticish (appears multiple times)
-- novachr13
-- crandivas_51156
-- kiwitou
-- .thatscrispy
-- finneon7
-- yellow_warning
-- buildoro
-- schmillen
-- kirojoy
-- ketari
-
-**Guest Players:**
-- Guest C0F2, Guest 8080, Guest F92B, Guest BD9F, Guest 2AD2, Guest 71EE, Guest BC60, Guest 9026, Guest 87BF, Guest 8D73, Guest 8BC7
-
-### Time Controls Used
-- Quick: 3m +2s (rated), 5m +5s (unrated)
-- Standard: 5m +0s, 10m +0s
-- Long: 10m +0s, 13m +6s
-
-### Observations
-
-1. **Most games are unrated** - Only a small portion are rated
-2. **Quick games common** - Many games end in under 2 minutes
-3. **Guest players abundant** - Many players play as guests without signing in
-4. **Repeat matchups** - Some session IDs appear multiple times (indicates rematches)
-5. **Six in a row is dominant** - Vast majority of games end by alignment victory
-
 ---
 
 ## API Endpoints Discovered
