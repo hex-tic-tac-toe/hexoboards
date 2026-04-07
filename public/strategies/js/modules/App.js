@@ -83,7 +83,8 @@ const App = {
     // Resolve startup hash
     const hash = window.location.hash.slice(1);
 
-    // Remote paste link (#remote/SERVICE/ID/TAB) — fetch and reconstruct
+    Match._load();
+    Match.init();
     const shareMatch = location.pathname.match(/^\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)\/?$/);
     if (shareMatch) {
       const tab = shareMatch[1];

@@ -927,6 +927,7 @@ const Match = {
     } catch {}
     Match.tree=MatchNode.create({turn:0}); Match.currentNode=Match.tree;
     Match._collapsedChildren = new Set();
+    Match.viewOffset = {x:0,y:0}; Match.viewZoom=1;
   },
 
   _serialize(node) {
