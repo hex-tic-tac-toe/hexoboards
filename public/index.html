@@ -124,39 +124,69 @@
   </div>
 
   <div class="match-toolbar">
-    <button class="btn" id="btn-match-undo"       data-tip="Undo last move (Ctrl+Z)">↩</button>
-    <button class="btn" id="btn-match-clear">✕ clear</button>
+    <button class="btn" id="btn-match-new"         data-tip="New game or load">new</button>
+    <button class="btn" id="btn-match-import"      data-tip="Import notation or URL">import</button>
     <span class="sep" style="margin:0 6px">—</span>
-    <button class="btn" id="btn-match-reset-view" data-tip="Reset pan / zoom">⌂</button>
-    <span class="sep" style="margin:0 6px">—</span>
-    <!-- snapshot: send current board state (all stones) to editor -->
-    <button class="btn" id="btn-match-snapshot"   data-tip="Copy full current board to Editor">board → editor</button>
-    <!-- select: toggle area-selection mode then extract a sub-region -->
-    <button class="btn" id="btn-match-select"     data-tip="Select a hexagonal area to extract">◻ select</button>
+    <button class="btn" id="btn-match-undo"        data-tip="Undo (Ctrl+Z)">↩</button>
+    <button class="btn" id="btn-match-clear"                               >✕ clear</button>
+    <button class="btn" id="btn-match-reset-view"  data-tip="Reset pan / zoom">⌂</button>
+    <button class="btn" id="btn-match-select"      data-tip="Select area to extract">◻ select</button>
+    <button class="btn" id="btn-match-snapshot"    data-tip="Send board to Editor">→ editor</button>
     <span class="sep" style="margin:0 6px">—</span>
     <span class="turn-indicator" id="match-turn">X's turn</span>
     <span class="sep">—</span>
     <span id="match-move-count">move 0</span>
-    <span class="sep">—</span>
-    <button class="btn" id="btn-share-match" data-tip="Export match history">⎘ export</button>
-    <span class="sep" style="margin:0 6px">—</span>
     <span id="match-sel-info" class="match-sel-info" hidden></span>
-    <span class="toolbar-hint">click to place · drag to pan · scroll to zoom</span>
+    <span style="flex:1"></span>
+    <button class="btn" id="btn-match-save"        data-tip="Save match (auto-saves on every move)">★ save</button>
+    <button class="btn" id="btn-share-match"       data-tip="Export match history">⎘ export</button>
   </div>
 
+  <!-- Eval bar — spans between the side panels, below toolbar -->
+  <div id="match-eval-bar" class="match-eval-bar"></div>
+
+  <!-- Left: play panel (resize handle on right edge) -->
+  <div id="match-play-area">
+    <div class="panel-resize match-play-resize" id="match-play-resize" style="left:auto;right:0"></div>
+    <!-- #match-play-panel injected by Match._renderPlayPanel() -->
+  </div>
+
+  <!-- Centre: board -->
   <div id="match-board-area"><svg id="match-board-svg"></svg></div>
 
+  <!-- Right: note panel (resize handle on left edge, like editor note panel) -->
+  <div id="match-note-panel">
+    <div class="panel-resize" id="match-note-resize"></div>
+  </div>
+
+  <!-- Far right: tree panel (resize handle on left edge) -->
   <div id="match-tree-panel">
-    <div class="tree-panel-resize" id="match-tree-resize"></div>
+    <div class="panel-resize" id="match-tree-resize"></div>
     <div class="tree-panel-head">Match Tree</div>
     <div id="match-tree-content"></div>
-    <div class="match-notation-panel">
-      <div class="match-notation-hdr">
-        <span class="match-notation-label">Notation</span>
-        <button class="btn" id="btn-match-notation-copy" data-tip="Copy hextic notation">copy</button>
-        <button class="btn" id="btn-match-notation-load" data-tip="Load notation into match">load</button>
+  </div>
+
+  <!-- Panel toggle tabs — editor-style vertical tabs on the right edge -->
+  <div id="match-panel-toggles">
+    <button id="match-play-toggle" class="active">play</button>
+    <button id="match-note-toggle"               >note</button>
+    <button id="match-tree-toggle" class="active">tree</button>
+  </div>
+
+  <!-- Import overlay -->
+  <div id="match-import-modal" class="match-import-modal" hidden>
+    <div class="match-import-hdr">
+      <span>IMPORT</span>
+      <button class="btn" id="btn-match-import-close">×</button>
+    </div>
+    <div class="match-import-body">
+      <textarea id="match-import-ta" class="match-notation-ta" spellcheck="false"
+        placeholder="paste hextic notation  or  dpaste.com/XXXXX  or  app link…" rows="4"></textarea>
+      <div class="match-import-actions">
+        <button class="btn" id="btn-match-import-load">load notation</button>
+        <button class="btn" id="btn-match-import-url">fetch URL</button>
       </div>
-      <textarea id="match-notation-ta" class="match-notation-ta" spellcheck="false" placeholder="paste hextic notation…"></textarea>
+      <div id="match-import-status" class="match-import-status"></div>
     </div>
   </div>
 </div>

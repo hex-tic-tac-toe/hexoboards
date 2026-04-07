@@ -4,6 +4,10 @@ const Doc = {
   section: (title = 'New Section') => ({ type: 's', id: Doc.uid(), title, collapsed: false, children: [] }),
   text:    (md = '')               => ({ type: 't', id: Doc.uid(), md }),
   pos:     (board, title = '', note = '', labels = [], htn = '') => ({ type: 'p', id: Doc.uid(), board, title, note, labels, htn }),
+  /** Saved match game — compact notation, no board thumbnail stored inline. */
+  match:   (notation, title = '', note = '', createdAt = Date.now()) => ({
+    type: 'm', id: Doc.uid(), notation, title, note, createdAt, savedAt: Date.now(),
+  }),
 
   find(tree, id) {
     for (let i = 0; i < tree.length; i++) {
@@ -28,7 +32,7 @@ const Doc = {
 
   allPositions(tree) {
     const r = [];
-    (function walk(nodes) { for (const n of nodes) { if (n.type === 'p') r.push(n); if (n.children) walk(n.children); } })(tree);
+    (function walk(nodes) { for (const n of nodes) { if (n.type === 'p' || n.type === 'm') r.push(n); if (n.children) walk(n.children); } })(tree);
     return r;
   },
 

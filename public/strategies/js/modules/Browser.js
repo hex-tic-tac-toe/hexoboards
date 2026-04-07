@@ -13,7 +13,10 @@ const Browser = {
   insertContext: null,
   _activeSec:    null,
 
-  init(onOpenPosition) { Browser._onOpen = onOpenPosition; },
+  init(onOpenPosition, onOpenInMatch) {
+    Browser._onOpen        = onOpenPosition;
+    Browser._onOpenInMatch = onOpenInMatch || null;
+  },
 
   render(libId, noHashUpdate) {
     Browser.activeLibId = libId;
@@ -117,6 +120,7 @@ const Browser = {
     if (node.type === 's') Browser._buildSection(el, node);
     else if (node.type === 't') Browser._buildText(el, node);
     else if (node.type === 'p') Browser._buildPos(el, node);
+    else if (node.type === 'm') Browser._buildMatch(el, node);
     if (Browser._editable) Browser._attachDrag(el, node);
     return el;
   },
@@ -257,6 +261,12 @@ const Browser = {
 
     const acts = document.createElement('div'); acts.className = 'card-actions';
     acts.appendChild(Browser._btn('open', () => Browser._onOpen?.(node)));
+    // If the entry has hextic notation it was saved from Match — offer to restore it
+    if (node.htn && Browser._onOpenInMatch) {
+      const matchBtn = Browser._btn('→ match', () => Browser._onOpenInMatch?.(node));
+      matchBtn.className += ' card-match-btn';
+      acts.appendChild(matchBtn);
+    }
     if (Browser._editable) {
       acts.appendChild(Browser._btn('edit', () => Browser._onOpen?.(node)));
       acts.appendChild(Browser._btn('\u2715', () => {
@@ -267,6 +277,50 @@ const Browser = {
     meta.appendChild(acts);
     el.appendChild(meta);
     el.addEventListener('dblclick', () => Browser._onOpen?.(node));
+  },
+
+  /** Render a saved match game entry — compact list row with date, move count, actions. */
+  _buildMatch(el, node) {
+    el.className += ' match-card';
+
+    const info = document.createElement('div'); info.className = 'match-card-info';
+
+    const titleEl = document.createElement('div'); titleEl.className = 'match-card-title';
+    titleEl.textContent = node.title || 'Untitled match';
+    info.appendChild(titleEl);
+
+    const meta = document.createElement('div'); meta.className = 'match-card-meta';
+    const date = new Date(node.createdAt || node.savedAt || 0);
+    const dateStr = date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    // Count moves from notation (number of integers at top level)
+    let moveCount = 0;
+    try {
+      const semi = node.notation.indexOf(';');
+      const arr = JSON.parse(semi > 0 ? node.notation.slice(0, semi) : node.notation);
+      moveCount = (function count(a) { return a.reduce((s,i) => s + (typeof i==='number' ? 1 : count(i)), 0); })(arr);
+    } catch {}
+    meta.textContent = `${dateStr}  ·  ${moveCount} move${moveCount !== 1 ? 's' : ''}`;
+    if (node.note) {
+      const noteEl = document.createElement('div'); noteEl.className = 'match-card-note';
+      noteEl.textContent = node.note.slice(0, 120);
+      info.appendChild(noteEl);
+    }
+    info.appendChild(meta);
+
+    const acts = document.createElement('div'); acts.className = 'card-actions match-card-acts';
+    if (Browser._onOpenInMatch) {
+      acts.appendChild(Browser._btn('open', () => Browser._onOpenInMatch?.(node)));
+    }
+    if (Browser._editable) {
+      acts.appendChild(Browser._btn('✕', () => {
+        if (!confirm('Delete match?')) return;
+        Doc.remove(Browser._doc, node.id); Browser._save(); Browser._renderDoc();
+      }));
+    }
+
+    el.appendChild(info);
+    el.appendChild(acts);
+    el.addEventListener('dblclick', () => Browser._onOpenInMatch?.(node));
   },
 
   _applySearch(query) {

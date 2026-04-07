@@ -34,7 +34,10 @@ const App = {
     // Build dynamic tab strips
     UI.init({
       editor:  () => UI.showEditor(()  => Editor._buildBoard()),
-      match:   () => UI.showMatch(()   => Match._buildBoard()),
+      match:   () => UI.showMatch(() => {
+        if (!Match._boardActive) Match._showStartModal();
+        Match._buildBoard();
+      }),
       browser: () => UI.showBrowser(() => Browser.render(Browser.activeLibId || Store.LOCAL)),
       data:    () => UI.showData(()    => LibManager.render()),
       convert: () => UI.showConvert(() => {}),
@@ -43,7 +46,22 @@ const App = {
     // Format selects from Notation.FORMATS registry
     App._initFormatSelects();
 
-    Browser.init(node => { Editor.loadNode(node || null); UI.showEditor(() => Editor._buildBoard()); });
+    Browser.init(
+      // open in editor
+      node => { Editor.loadNode(node || null); UI.showEditor(() => Editor._buildBoard()); },
+      // open in match (entry with hextic notation)
+      node => {
+        const notation = node.notation || node.htn;
+        if (!notation) return;
+        Match.title      = node.title || '';
+        Match.note       = node.note  || '';
+        Match.createdAt  = node.createdAt || 0;
+        Match._libNodeId = node.id;
+        if (Match.fromHextic(notation)) {
+          UI.showMatch(() => { Match._renderPlayPanel(); Match._renderNotePanel(); Match._renderTree(); Match._buildBoard(); });
+        } else { App._toast('could not load match'); }
+      }
+    );
     LibManager.init(App._toast);
 
     Editor.init();
@@ -56,6 +74,9 @@ const App = {
       UI.showEditor(() => Editor._buildBoard());
       App._toast('selection → editor');
     };
+
+    // Match → Library save
+    Match._onSaveToLibrary = () => App._matchSaveToLibrary();
 
     // Resolve startup hash
     const hash = window.location.hash.slice(1);
@@ -112,7 +133,10 @@ const App = {
       });
     } else if (hash === 'd') { UI.showData(() => LibManager.render()); }
     else if (hash === 'c')   { UI.showConvert(() => {}); }
-    else if (hash === 'm' || hash === 'a') { UI.showMatch(() => Match._buildBoard()); }
+    else if (hash === 'm' || hash === 'a') { UI.showMatch(() => {
+      if (!Match._boardActive) Match._showStartModal();
+      Match._buildBoard();
+    }); }
     else { UI.showEditor(() => Editor._buildBoard()); }
   },
 
@@ -133,14 +157,28 @@ const App = {
     if (tab === 'editor' && (data.type === 'hexoboards-board' || data.board)) {
       const grid = URLCodec.decode(data.board);
       if (grid) { Editor.loadGrid(grid); UI.showEditor(() => Editor._buildBoard()); App._toast('board loaded'); }
-    } else if (tab === 'match' && data.type === 'hexoboards-match' && data.tree) {
-      MatchNode.resetId();
-      Match.tree        = Match._deserialize(data.tree);
-      Match.currentNode = Match.tree;
-      Match._collapsedChildren.clear();
-      Match._save();
-      UI.showMatch(() => { Match._renderTree(); Match._buildBoard(); });
-      App._toast('match loaded');
+    } else if (tab === 'match') {
+      let loaded = false;
+      // Compact format (hextic notation wrapped in JSON)
+      if ((data.type === 'hexoboards-match-compact' || data.notation) && data.notation) {
+        Match.title   = data.title || '';
+        Match.note    = data.note  || '';
+        loaded = Match.fromHextic(data.notation);
+      }
+      // Legacy full-tree format
+      if (!loaded && data.type === 'hexoboards-match' && data.tree) {
+        MatchNode.resetId();
+        Match.tree        = Match._deserialize(data.tree);
+        Match.currentNode = Match.tree;
+        Match._collapsedChildren.clear();
+        Match._boardActive = true;
+        Match._save();
+        loaded = true;
+      }
+      if (loaded) {
+        UI.showMatch(() => { Match._renderPlayPanel(); Match._renderNotePanel(); Match._renderTree(); Match._buildBoard(); });
+        App._toast('match loaded');
+      } else { App._toast('unrecognised format'); }
     } else { App._toast('unrecognised format'); }
   },
 
@@ -165,6 +203,36 @@ const App = {
 
 
   // ── save ──────────────────────────────────────────────────────────────────
+
+  /** Save the current match as a Doc.match() entry in the active library. */
+  _matchSaveToLibrary() {
+    const libId  = (Browser.activeLibId && Store.isLocal(Browser.activeLibId))
+      ? Browser.activeLibId : Store.LOCAL;
+    const docObj = Store.getDoc(libId);
+    const tree   = docObj?.doc || [];
+    const notation = Match.toHextic();
+
+    if (Match._libNodeId) {
+      const found = Doc.find(tree, Match._libNodeId);
+      if (found) {
+        Object.assign(found[0], {
+          notation, title: Match.title, note: Match.note, savedAt: Date.now(),
+        });
+        Store.saveDoc(libId, tree);
+        if (UI.activeView === 'browser') Browser.render(libId);
+        App._toast('match updated');
+        return;
+      }
+    }
+    // Create new entry using Doc.match type
+    const node       = Doc.match(notation, Match.title, Match.note, Match.createdAt || Date.now());
+    Match._libNodeId  = node.id;
+    tree.push(node);
+    Store.saveDoc(libId, tree);
+    Match._save();
+    if (UI.activeView === 'browser') Browser.render(libId);
+    App._toast('match saved');
+  },
 
   _save() {
     Editor.note  = document.getElementById('note-text').value;
@@ -286,8 +354,10 @@ const App = {
     document.getElementById('btn-share-match')?.addEventListener('click', () => {
       Share.showModal(
         'match',
-        () => JSON.stringify({ type:'hexoboards-match', tree: Match._serialize(Match.tree) }, null, 2),
-        'Match History',
+        // Compact export: wrap hextic notation so the recipient can import it
+        () => JSON.stringify({ type:'hexoboards-match-compact', notation: Match.toHextic(),
+          title: Match.title, note: Match.note }, null, 2),
+        'Match',
         App._toast,
         (tab, data) => App._loadImportedData(tab, data)
       );
@@ -309,18 +379,50 @@ const App = {
         App._copy(document.getElementById(`nf-${id}`)?.value || ''));
     }
 
-    // Match toolbar — snapshot current board to editor
-    // Match notation panel
-    document.getElementById('btn-match-notation-copy').addEventListener('click', () => {
-      const text = Match.toHextic();
-      if (text) App._copy(text); else App._toast('nothing to copy');
+    // Match toolbar buttons
+    document.getElementById('btn-match-new').addEventListener('click', () => Match._showStartModal());
+
+    document.getElementById('btn-match-import').addEventListener('click', () => {
+      const modal = document.getElementById('match-import-modal');
+      if (modal) { modal.hidden = !modal.hidden; if (!modal.hidden) document.getElementById('match-import-ta')?.focus(); }
     });
-    document.getElementById('btn-match-notation-load').addEventListener('click', () => {
-      const text = document.getElementById('match-notation-ta').value.trim();
-      if (!Match.fromHextic(text)) App._toast('invalid notation');
+    document.getElementById('btn-match-import-close').addEventListener('click', () => {
+      document.getElementById('match-import-modal').hidden = true;
+    });
+    document.getElementById('btn-match-import-load').addEventListener('click', () => {
+      const text = document.getElementById('match-import-ta')?.value.trim();
+      if (!text) return;
+      if (Match.fromHextic(text)) {
+        document.getElementById('match-import-modal').hidden = true;
+        App._toast('loaded');
+      } else { App._toast('invalid notation'); }
+    });
+    document.getElementById('btn-match-import-url').addEventListener('click', async () => {
+      const url = document.getElementById('match-import-ta')?.value.trim();
+      if (!url) return;
+      const statusEl = document.getElementById('match-import-status');
+      if (statusEl) statusEl.textContent = 'fetching…';
+      try {
+        const remote = Share.parseRemoteFromAnyUrl(url, 'match');
+        if (!remote) { if (statusEl) statusEl.textContent = 'unrecognised URL'; return; }
+        const text = await Share.fetchRemote(remote.service, remote.id);
+        App._loadImportedData(remote.tab, JSON.parse(text));
+        document.getElementById('match-import-modal').hidden = true;
+        App._toast('loaded');
+      } catch (e) { if (statusEl) statusEl.textContent = 'failed: ' + e.message; }
     });
 
-    // Match toolbar — snapshot current board to editor
+    // Match panel toggle buttons
+    document.getElementById('match-play-toggle').addEventListener('click', () => {
+      Match.playOpen = !Match.playOpen; Match._syncMatchPanels(); Match._buildBoard();
+    });
+    document.getElementById('match-note-toggle').addEventListener('click', () => {
+      Match.noteOpen = !Match.noteOpen; Match._syncMatchPanels(); Match._renderNotePanel(); Match._buildBoard();
+    });
+    document.getElementById('match-tree-toggle').addEventListener('click', () => {
+      Match.treeOpen = !Match.treeOpen; Match._syncMatchPanels(); Match._buildBoard();
+    });
+
     document.getElementById('btn-match-snapshot').addEventListener('click', () => {
       const grid = Match.currentBoardAsGrid();
       Editor.loadGrid(grid);
@@ -389,17 +491,34 @@ const App = {
   // ── resize handles ────────────────────────────────────────────────────────
 
   _bindResizeHandles() {
+    // ── Editor panels (right side) ──────────────────────────────────────────
     App._makeResizable(document.getElementById('note-resize'),
       e => Editor._applyPanelResize('note', window.innerWidth - e.clientX));
     App._makeResizable(document.getElementById('notation-resize'),
-      e => Editor._applyPanelResize('notation', window.innerWidth - (Editor.noteOpen?Layout.NOTE_W:0) - e.clientX));
+      e => Editor._applyPanelResize('notation', window.innerWidth - (Editor.noteOpen ? Layout.NOTE_W : 0) - e.clientX));
+
+    // ── Browser sidebar ─────────────────────────────────────────────────────
     App._makeResizable(document.getElementById('sidebar-resize'), e => {
       const w = Math.max(120, Math.min(360, e.clientX));
       document.getElementById('lib-sidebar').style.width = w+'px';
       document.getElementById('browser-main').style.left = w+'px';
-      const tb=document.getElementById('browser-toolbar'); if(tb) tb.style.left=w+'px';
+      const tb = document.getElementById('browser-toolbar'); if (tb) tb.style.left = w+'px';
       document.documentElement.style.setProperty('--lib-side-w', w+'px');
     });
+
+    // ── Match panels ────────────────────────────────────────────────────────
+    // Play panel: handle is on the RIGHT edge, dragging right shrinks it
+    App._makeResizable(document.getElementById('match-play-resize'),
+      e => Match._applyMatchPanelResize('play', e.clientX));
+
+    // Note panel: handle is on the LEFT edge, dragging left widens it
+    App._makeResizable(document.getElementById('match-note-resize'),
+      e => Match._applyMatchPanelResize('note',
+        window.innerWidth - e.clientX - (Match.treeOpen ? Layout.MATCH_TREE_W : 0)));
+
+    // Tree panel: handle is on the LEFT edge
+    App._makeResizable(document.getElementById('match-tree-resize'),
+      e => Match._applyMatchPanelResize('tree', window.innerWidth - e.clientX));
   },
 
   _makeResizable(handle, onMove) {

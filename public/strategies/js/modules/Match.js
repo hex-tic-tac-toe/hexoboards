@@ -18,11 +18,16 @@
  *   Match.clearSelection()
  *   Match.onExtract             — callback(grid) set by App
  */
-import { HexGrid }   from './HexGrid.js';
-import { BoardView } from './BoardView.js';
-import { HexLayout } from './HexLayout.js';
-import { UI }        from './UI.js';
-import { Store }     from './Store.js';
+import { HexGrid }        from './HexGrid.js';
+import { BoardView }      from './BoardView.js';
+import { HexLayout }      from './HexLayout.js';
+import { UI }             from './UI.js';
+import { Store }          from './Store.js';
+import { Layout }         from './Layout.js';
+import { Bot }            from './Bot.js';
+import { Eval }           from './Eval.js';
+import { MoveAnnotator }  from './MoveAnnotator.js';
+import { WinDetector }    from './WinDetector.js';
 
 // ── node factory ──────────────────────────────────────────────────────────────
 
@@ -75,18 +80,55 @@ const Match = {
   _selCache:      null,       // visible cells cached during drag
   _selRafId:      null,
 
-  onExtract: null,            // callback(grid) — set by App
+  onExtract:        null,   // callback(grid) — set by App
+  _onSaveToLibrary: null,  // callback() — set by App, saves match to library
+
+  // Play panel state
+  botX:       null,   // bot id for player X, or null (human)
+  botO:       null,   // bot id for player O, or null (human)
+  _botRunning:    false, // prevent re-entrant bot placement
+  _currentBotId:  null,  // bot currently placing (null = human)
+
+  // Panel visibility — mirrors Editor.noteOpen / notationOpen pattern
+  playOpen: true,
+  noteOpen: false,
+  treeOpen: true,
+
+  // Win state
+  winCells: null,     // Set<"q,r"> of the winning run, or null
+  _winNodeId: null,   // id of the node that completed the win
+
+  // Whether board is active (gated by start modal)
+  _boardActive: false,
+
+  // Note / library metadata
+  title:      '',
+  note:       '',
+  createdAt:  0,      // timestamp when this game was started
+  _libNodeId: null,   // Doc node ID if this match has been saved to a library
 
   // ── init ─────────────────────────────────────────────────────────────────
 
   init() {
     Match._view              = BoardView.create('match-board-svg');
     Match._collapsedChildren = new Set();
-    Match.tree               = MatchNode.create({ turn: 0 });
-    Match.currentNode        = Match.tree;
-    Match._renderTree();
     Match._bindEvents();
+    Match._syncMatchPanels();
+    Match._renderPlayPanel();
+
+    // If a tree was restored from localStorage, activate the board directly
+    const hasTree = Match.tree?.children.length > 0;
+    if (hasTree) {
+      Match._boardActive = true;
+    } else {
+      Match.tree        = MatchNode.create({ turn: 0 });
+      Match.currentNode = Match.tree;
+    }
+    Match._renderNotePanel();
+    Match._renderTree();
     Match._buildBoard();
+    // Modal is shown by App when the tab is entered — not here (avoids spurious
+    // modals when other tabs reload, e.g. after clearAll in the library tab).
   },
 
   // ── public actions ────────────────────────────────────────────────────────
@@ -108,10 +150,18 @@ const Match = {
     Match.currentNode     = Match.tree;
     Match._lastBoardEmpty = true;
     Match._collapsedChildren.clear();
-    Match.viewOffset = { x: 0, y: 0 };
-    Match.viewZoom   = 1;
+    Match.viewOffset   = { x: 0, y: 0 };
+    Match.viewZoom     = 1;
+    Match.winCells     = null;
+    Match._winNodeId   = null;
+    Match._boardActive = false;
+    Match.title        = '';
+    Match.note         = '';
+    Match.createdAt    = 0;
+    Match._libNodeId   = null;
     Match.clearSelection();
     Match._save(); Match._renderTree(); Match._buildBoard();
+    Match._showStartModal();
   },
 
   loadFromGrid(grid) {
@@ -125,6 +175,8 @@ const Match = {
     Match._lastBoardEmpty = cells.size === 0;
     Match._collapsedChildren.clear();
     Match.viewOffset = { x: 0, y: 0 }; Match.viewZoom = 1;
+    Match._boardActive = true;
+    Match.title = ''; Match.note = ''; Match._libNodeId = null;
     Match.clearSelection();
     Match._save(); Match._renderTree(); Match._buildBoard();
   },
@@ -239,21 +291,136 @@ const Match = {
 
   // ── move application ──────────────────────────────────────────────────────
 
-  _applyStone(q, r) {
+  /**
+   * Place a stone (called by the user via board click).
+   * After placement, hands off to the bot loop if the next player has a bot.
+   */
+  async _applyStone(q, r) {
+    if (Match._botRunning) return; // don't interrupt mid-bot sequence
+    await Match._placeStone(q, r);
+    Match._maybeTriggerBot();
+  },
+
+  /**
+   * Raw stone placement — no bot trigger.
+   * Used both by human (_applyStone) and by the bot loop (_maybeTriggerBot).
+   * Returns true if the stone was placed, false if illegal or won.
+   * `skipRender` batches tree renders during bot sequences.
+   */
+  async _placeStone(q, r, skipRender = false) {
     const cells = Match.currentNode.grid.cells;
-    if (!Match._isLegalMove(q, r, cells)) return;
+    if (!Match._isLegalMove(q, r, cells)) return false;
+
+    const state    = Match._getNextState();
+    const turn     = Match._getTurn();
     const newCells = new Map(Array.from(cells, ([k,c]) => [k, {...c}]));
-    newCells.set(HexGrid.key(q,r), {q,r,state:Match._getNextState(),legal:false});
+    newCells.set(HexGrid.key(q, r), { q, r, state, legal: false });
+
     const newNode = MatchNode.create({
-      parent: Match.currentNode, turn: Match._getTurn()+1,
-      grid: {cells:newCells}, lastMove:{q,r,state:Match._getNextState(),turn:Match._getTurn()},
+      parent:   Match.currentNode,
+      turn:     turn + 1,
+      grid:     { cells: newCells },
+      lastMove: { q, r, state, turn, botId: Match._currentBotId || null },
     });
     Match.currentNode.children.push(newNode);
     Match.currentNode = newNode;
-    Match._save(); Match._renderTree(); Match._buildBoard();
+
+    // Win detection
+    const win = WinDetector.check(q, r, state, newCells);
+    if (win) {
+      Match.winCells   = new Set(win.map(c => HexGrid.key(c.q, c.r)));
+      Match._winNodeId = newNode.id;
+      Match._save(); Match._renderTree(); Match._buildBoard();
+      Match._showWinPopup(state, win);
+      return false; // signal: stop placing
+    }
+    Match.winCells = null;
+
+    // Async annotation (non-blocking — does not block placement)
+    MoveAnnotator.annotate(q, r, state, newCells).then(label => {
+      if (label && !newNode.label) {
+        newNode.label = label;
+        if (!skipRender) { Match._save(); Match._renderTree(); }
+      }
+    });
+
+    Match._save();
+    if (!skipRender) {
+      Match._renderTree();
+      Match._buildBoard();
+      // Eval bar update
+      Eval.evaluate(newCells, turn + 1).then(score => Match._renderEvalBar(score));
+    } else {
+      // Lightweight board-only refresh during bot runs (no tree rebuild)
+      Match._buildBoard();
+    }
+
+    return true;
   },
 
-  _goTo(node)   { Match.currentNode = node; Match._renderTree(); Match._buildBoard(); },
+  /**
+   * Bot move loop. Plays the full consecutive pair (or single first move) for
+   * the current player, then hands back to the human (or the opposing bot).
+   * Uses 100ms delay between moves so the UI stays responsive.
+   *
+   * Hextic turn structure: X plays 1 (first move only), then pairs of 2.
+   * _getPlayer() already encodes this — just keep playing while the same bot
+   * is still the active player.
+   */
+  async _maybeTriggerBot() {
+    if (Match._botRunning) return;
+    if (Match.winCells)    return;
+
+    const player = Match._getPlayer();
+    const botId  = player === 1 ? Match.botX : Match.botO;
+    if (!botId) return;
+
+    Match._botRunning = true;
+    // Show a subtle "thinking" indicator in the turn label
+    const turnEl = document.getElementById('match-turn');
+    const origText = turnEl?.textContent || '';
+
+    try {
+      while (!Match.winCells) {
+        const nowPlayer = Match._getPlayer();
+        const nowBotId  = nowPlayer === 1 ? Match.botX : Match.botO;
+        // Stop if the active player changed to a human (or different bot)
+        if (!nowBotId) break;
+
+        if (turnEl) turnEl.textContent = (nowPlayer === 1 ? 'X' : 'O') + ' thinking…';
+
+        await new Promise(r => setTimeout(r, 100));
+
+        const vis  = Match._computeVisibleCells(Match.currentNode.grid.cells);
+        const move = await Bot.computeMove(nowBotId, vis, Match._getTurn());
+        if (!move || !Match._isLegalMove(move.q, move.r, Match.currentNode.grid.cells)) break;
+
+        Match._currentBotId = nowBotId;
+        const cont = await Match._placeStone(move.q, move.r, false);
+        Match._currentBotId = null;
+        if (!cont) break;
+      }
+    } finally {
+      Match._botRunning   = false;
+      Match._currentBotId = null;
+      // Restore turn indicator
+      if (turnEl && !Match.winCells) {
+        const p = Match._getPlayer();
+        turnEl.textContent = (p === 1 ? 'X' : 'O') + "'s turn";
+      }
+      // Final render pass to sync tree
+      Match._renderTree();
+    }
+  },
+
+  _goTo(node) {
+    Match.currentNode = node;
+    // Clear win highlight when navigating away from the winning move
+    if (Match.winCells && node.id !== Match._winNodeId) {
+      Match.winCells = null;
+    }
+    Match._renderTree(); Match._buildBoard();
+  },
 
   _goToById(id) {
     const find = n => { if (n.id===id) return n; for (const c of n.children){const f=find(c);if(f)return f;} return null; };
@@ -281,14 +448,15 @@ const Match = {
     Match._view.build(
       { s: Math.max(5, maxD+2), baseR: HexLayout.fitRadius(11,w,h,80), cells: vis },
       [],
-      { w, h, margin:80,
-        zoom:   nowEmpty ? 1 : Match.viewZoom,
-        offset: nowEmpty ? {x:0,y:0} : Match.viewOffset,
-        selected: Match.selectedCells || undefined,
+      { w, h, margin: 80,
+        zoom:     nowEmpty ? 1 : Match.viewZoom,
+        offset:   nowEmpty ? {x:0,y:0} : Match.viewOffset,
+        selected: Match.selectedCells || Match.winCells || undefined,
+        selColor: Match.winCells ? 'win' : undefined,
       }
     );
-    document.getElementById('match-turn').textContent       = `${Match._getPlayer()===1?'X':'O'}'s turn`;
-    document.getElementById('match-move-count').textContent = `move ${Match._getTurn()}`;
+    const turnEl2 = document.getElementById('match-turn'); if(turnEl2 && !Match._botRunning) turnEl2.textContent = `${Match._getPlayer()===1?'X':'O'}'s turn`;
+    document.getElementById('match-move-count')?.textContent && (document.getElementById('match-move-count').textContent = `move ${Match._getTurn()}`);
   },
 
   // ── tree rendering ────────────────────────────────────────────────────────
@@ -306,7 +474,9 @@ const Match = {
 
       // ── main row (original flat layout) ────────────────────────────────
       const line = document.createElement('div');
-      line.className = ['tree-node', isCurrent&&'current', isFork&&'fork', isChildOfFork&&'child-of-fork']
+      const isWin = node.id === Match._winNodeId;
+      line.className = ['tree-node', isCurrent&&'current', isFork&&'fork',
+        isChildOfFork&&'child-of-fork', isWin&&'win-node']
         .filter(Boolean).join(' ');
       line.dataset.nodeId = node.id;
       if (isChildOfFork) line.title = 'Double-click to collapse / expand';
@@ -322,6 +492,12 @@ const Match = {
         coords.className   = 'tree-node-coords';
         coords.textContent = `${node.lastMove.q},${node.lastMove.r}`;
         line.appendChild(coords);
+        if (node.lastMove.botId) {
+          const botBadge = document.createElement('span');
+          botBadge.className   = 'tree-bot-badge';
+          botBadge.textContent = node.lastMove.botId;
+          line.appendChild(botBadge);
+        }
       }
 
       if (isChildOfFork && isCollapsed) {
@@ -404,11 +580,230 @@ const Match = {
 
     requestAnimationFrame(() => {
       container.querySelector('.tree-node.current')?.scrollIntoView({block:'nearest'});
-      Match._updateNotationPanel();
     });
   },
 
-  // ── label picker ──────────────────────────────────────────────────────────
+  // ── start modal ──────────────────────────────────────────────────────────
+
+  /** Shown when Match tab is opened with an empty tree. */
+  _showStartModal() {
+    document.getElementById('match-start-modal')?.remove();
+    document.getElementById('match-start-backdrop')?.remove();
+
+    const backdrop = Object.assign(document.createElement('div'),
+      { id: 'match-start-backdrop', className: 'modal-backdrop' });
+    const modal = Object.assign(document.createElement('div'),
+      { id: 'match-start-modal', className: 'start-modal' });
+
+    const ttl = document.createElement('div'); ttl.className = 'start-modal-title';
+    ttl.textContent = 'MATCH'; modal.appendChild(ttl);
+
+    const body = document.createElement('div'); body.className = 'start-modal-body';
+
+    const makeBtn = (label, fn) => {
+      const b = document.createElement('button'); b.className = 'btn start-modal-btn';
+      b.textContent = label;
+      b.addEventListener('click', () => { backdrop.remove(); modal.remove(); fn(); });
+      return b;
+    };
+
+    body.appendChild(makeBtn('new game', () => {
+      // Reset without calling clear() to avoid re-triggering modal
+      Match.tree            = MatchNode.create({ turn: 0 });
+      Match.currentNode     = Match.tree;
+      Match._lastBoardEmpty = true;
+      Match._collapsedChildren.clear();
+      Match.viewOffset  = { x: 0, y: 0 };
+      Match.viewZoom    = 1;
+      Match.winCells    = null;
+      Match._winNodeId  = null;
+      Match._boardActive = true;
+      Match.title        = '';
+      Match.note         = '';
+      Match.createdAt    = Date.now();
+      Match._libNodeId   = null;
+      Match.clearSelection();
+      Match._save(); Match._renderTree(); Match._buildBoard();
+    }));
+
+    if (Match.tree?.children.length > 0) {
+      body.appendChild(makeBtn('resume saved game', () => {
+        Match._boardActive = true;
+        Match._syncMatchPanels();
+        Match._renderTree(); Match._buildBoard();
+      }));
+    }
+
+    const pasteRow = document.createElement('div'); pasteRow.className = 'start-paste-row';
+    const pasteIn  = document.createElement('input'); pasteIn.type = 'text';
+    pasteIn.className = 'start-paste-input'; pasteIn.placeholder = 'paste hextic notation…';
+    const pasteBtn = document.createElement('button'); pasteBtn.className = 'btn';
+    pasteBtn.textContent = 'load notation';
+    pasteBtn.addEventListener('click', () => {
+      if (!Match.fromHextic(pasteIn.value.trim())) return;
+      Match._boardActive = true;
+      backdrop.remove(); modal.remove();
+    });
+    pasteIn.addEventListener('keydown', e => { if (e.key === 'Enter') pasteBtn.click(); });
+    pasteRow.append(pasteIn, pasteBtn);
+
+    const fromClipBtn = document.createElement('button');
+    fromClipBtn.className = 'btn start-modal-btn';
+    fromClipBtn.textContent = 'load from clipboard';
+    fromClipBtn.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!Match.fromHextic(text.trim())) { pasteIn.value = text; pasteIn.focus(); return; }
+        Match._boardActive = true;
+        backdrop.remove(); modal.remove();
+      } catch { pasteIn.focus(); }
+    });
+
+    body.append(pasteRow, fromClipBtn);
+    modal.appendChild(body);
+    // Clicking backdrop = cancel (no state change)
+    backdrop.addEventListener('click', () => { backdrop.remove(); modal.remove(); });
+    document.body.append(backdrop, modal);
+  },
+
+  // ── win popup ─────────────────────────────────────────────────────────────
+
+  _showWinPopup(state, winCells) {
+    document.getElementById('match-win-popup')?.remove();
+
+    const playerName = state === 1 ? 'X' : 'O';
+    const popup      = Object.assign(document.createElement('div'),
+      { id: 'match-win-popup', className: 'win-popup' });
+
+    // Count stones
+    let xCount = 0, oCount = 0;
+    for (const c of Match.currentNode.grid.cells.values()) {
+      if (c.state === 1) xCount++; else if (c.state === 2) oCount++;
+    }
+
+    popup.innerHTML = `
+      <div class="win-popup-player">${playerName} wins!</div>
+      <div class="win-popup-stats">
+        <span>X stones: ${xCount}</span><span>O stones: ${oCount}</span>
+        <span>Moves: ${Match._getTurn()}</span>
+        <span>Run: ${winCells.length} in a row</span>
+      </div>
+      <div class="win-popup-actions"></div>`;
+
+    const acts = popup.querySelector('.win-popup-actions');
+    const btn  = (lbl, fn) => {
+      const b = document.createElement('button'); b.className = 'btn'; b.textContent = lbl;
+      b.addEventListener('click', fn); acts.appendChild(b);
+    };
+    btn('continue playing', () => popup.remove());
+    btn('new game', () => { popup.remove(); Match.clear(); });
+
+    // Dismiss on click outside
+    popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
+    document.body.appendChild(popup);
+  },
+
+  // ── play panel ────────────────────────────────────────────────────────────
+
+  /** Build / rebuild the play panel inside #match-tree-panel. */
+  _renderPlayPanel() {
+    let panel = document.getElementById('match-play-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'match-play-panel'; panel.className = 'match-play-panel';
+      const playArea = document.getElementById('match-play-area');
+      if (playArea) playArea.appendChild(panel);
+    }
+    panel.innerHTML = '';
+
+    const bots = Bot.list();
+    const makePlayerRow = (label, stateKey, botKey) => {
+      const row = document.createElement('div'); row.className = 'play-row';
+      const lbl = document.createElement('span'); lbl.className = 'play-row-label'; lbl.textContent = label;
+      row.appendChild(lbl);
+
+      // Bot selector
+      const sel = document.createElement('select'); sel.className = 'play-bot-select';
+      const humanOpt = Object.assign(document.createElement('option'), { value: '', textContent: 'human' });
+      sel.appendChild(humanOpt);
+      bots.forEach(bot => sel.appendChild(Object.assign(document.createElement('option'), { value: bot.id, textContent: bot.name })));
+      sel.value = Match[botKey] || '';
+      sel.addEventListener('change', () => { Match[botKey] = sel.value || null; });
+      row.appendChild(sel);
+
+      // Single move trigger
+      const trigger = document.createElement('button'); trigger.className = 'btn play-trigger';
+      trigger.textContent = '▶'; trigger.title = `Place one ${label} stone`;
+      trigger.addEventListener('click', async () => {
+        if (Match._botRunning) return;
+        const botId = sel.value || bots[0]?.id;
+        if (!botId) return;
+        Match._botRunning = true;
+        try {
+          await new Promise(r => setTimeout(r, 100));
+          const vis  = Match._computeVisibleCells(Match.currentNode.grid.cells);
+          const move = await Bot.computeMove(botId, vis, Match._getTurn());
+          if (move) await Match._placeStone(move.q, move.r);
+        } finally { Match._botRunning = false; }
+      });
+      row.appendChild(trigger);
+      return row;
+    };
+
+    // ── Play / bot section ─────────────────────────────────────────────────
+    const hdr = document.createElement('div'); hdr.className = 'play-panel-hdr'; hdr.textContent = 'Play';
+    panel.appendChild(hdr);
+    panel.appendChild(makePlayerRow('X', 'botX', 'botX'));
+    panel.appendChild(makePlayerRow('O', 'botO', 'botO'));
+
+    // Eval bar rendered in dedicated toolbar-level element (between panels)
+    Match._renderEvalBar(0.5);
+  },
+
+  _renderNotePanel() {
+    let panel = document.getElementById('match-note-panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    const hdr = document.createElement('div'); hdr.className = 'play-panel-hdr'; hdr.textContent = 'Note';
+    panel.appendChild(hdr);
+
+    const titleWrap = document.createElement('div'); titleWrap.className = 'play-note-wrap';
+    const titleIn   = document.createElement('input'); titleIn.type = 'text';
+    titleIn.className   = 'play-title-input'; titleIn.placeholder = 'match title…';
+    titleIn.value = Match.title;
+    titleIn.addEventListener('input', () => { Match.title = titleIn.value; });
+    titleWrap.appendChild(titleIn);
+
+    const noteWrap = document.createElement('div'); noteWrap.className = 'play-note-wrap';
+    const noteTa   = document.createElement('textarea');
+    noteTa.className = 'play-note-ta'; noteTa.placeholder = 'notes…';
+    noteTa.value = Match.note;
+    noteTa.addEventListener('input', () => { Match.note = noteTa.value; });
+    noteWrap.appendChild(noteTa);
+
+    const saveLibBtn = document.createElement('button');
+    saveLibBtn.id        = 'btn-match-save-lib';
+    saveLibBtn.className = 'btn play-save-lib-btn';
+    saveLibBtn.textContent = Match._libNodeId ? '★ update' : '★ save to library';
+    saveLibBtn.addEventListener('click', () => {
+      if (Match._onSaveToLibrary) {
+        Match._onSaveToLibrary();
+        saveLibBtn.textContent = '★ update';
+      }
+    });
+
+    panel.appendChild(titleWrap);
+    panel.appendChild(noteWrap);
+    panel.appendChild(saveLibBtn);
+  },
+
+  _renderEvalBar(score = 0.5) {
+    const bar = document.getElementById('match-eval-bar');
+    if (bar) Eval.render(bar, score);
+  },
+
+    // ── label picker ──────────────────────────────────────────────────────────
 
   _showLabelPicker(node, anchor) {
     document.getElementById('label-picker')?.remove();
@@ -480,6 +875,10 @@ const Match = {
         tree:      Match._serialize(Match.tree),
         viewOffset:Match.viewOffset, viewZoom:Match.viewZoom,
         collapsed: Array.from(Match._collapsedChildren),
+        title:     Match.title,
+        note:      Match.note,
+        libNodeId:  Match._libNodeId,
+        createdAt:  Match.createdAt,
       }));
     } catch {}
   },
@@ -494,6 +893,10 @@ const Match = {
         Match.currentNode        = Match.tree;
         Match.viewOffset         = {x:0,y:0}; Match.viewZoom=1;
         Match._collapsedChildren = new Set(data.collapsed||[]);
+        Match.title              = data.title     || '';
+        Match.note               = data.note      || '';
+        Match._libNodeId         = data.libNodeId || null;
+        Match.createdAt          = data.createdAt  || 0;
         return;
       }
     } catch {}
@@ -611,19 +1014,73 @@ const Match = {
       ? positions[focusIndex]
       : Match.tree;
 
+    Match._boardActive = true;
+    if (!Match.createdAt) Match.createdAt = Date.now();
+    Match._syncMatchPanels();
     Match._save();
     Match._renderTree();
     Match._buildBoard();
     return true;
   },
 
-  /** Update the notation textarea (skip when the textarea is focused). */
-  _updateNotationPanel() {
-    const ta = document.getElementById('match-notation-ta');
-    if (ta && document.activeElement !== ta) ta.value = Match.toHextic();
+
+
+  // ── panel layout ──────────────────────────────────────────────────────────
+
+  _syncMatchPanels() {
+    const playW  = Match.playOpen ? Layout.MATCH_PLAY_W : 0;
+    const noteW  = Match.noteOpen ? Layout.MATCH_NOTE_W : 0;
+    const treeW  = Match.treeOpen ? Layout.MATCH_TREE_W : 0;
+    const rightW = noteW + treeW;
+
+    const playPanel = document.getElementById('match-play-area');
+    const notePanel = document.getElementById('match-note-panel');
+    const treePanel = document.getElementById('match-tree-panel');
+    const boardArea = document.getElementById('match-board-area');
+    const evalBar   = document.getElementById('match-eval-bar');
+    const toggles   = document.getElementById('match-panel-toggles');
+
+    // Mirror editor: show/hide via display:flex (not hidden attribute)
+    if (playPanel) {
+      playPanel.style.display = Match.playOpen ? 'flex' : 'none';
+      playPanel.style.width   = Layout.MATCH_PLAY_W + 'px'; // keep width so resize works
+    }
+    if (notePanel) {
+      notePanel.style.display = Match.noteOpen ? 'flex' : 'none';
+      notePanel.style.width   = Layout.MATCH_NOTE_W + 'px';
+      notePanel.style.right   = treeW + 'px';
+    }
+    if (treePanel) {
+      treePanel.style.display = Match.treeOpen ? 'flex' : 'none';
+      treePanel.style.width   = Layout.MATCH_TREE_W + 'px';
+    }
+    if (boardArea) { boardArea.style.left = playW + 'px'; boardArea.style.right = rightW + 'px'; }
+    if (evalBar)   { evalBar.style.left   = playW + 'px'; evalBar.style.right   = rightW + 'px'; }
+    if (toggles)   { toggles.style.right  = rightW + 'px'; }
+
+    document.getElementById('match-play-toggle')?.classList.toggle('active', Match.playOpen);
+    document.getElementById('match-note-toggle')?.classList.toggle('active', Match.noteOpen);
+    document.getElementById('match-tree-toggle')?.classList.toggle('active', Match.treeOpen);
   },
 
-  // ── events ────────────────────────────────────────────────────────────────
+  /** Resize a match panel width (clamp between min/max). */
+  _applyMatchPanelResize(which, newW) {
+    const clamped = Math.max(150, Math.min(520, newW));
+    if (which === 'play') Layout.MATCH_PLAY_W = clamped;
+    if (which === 'note') Layout.MATCH_NOTE_W = clamped;
+    if (which === 'tree') Layout.MATCH_TREE_W = clamped;
+    Match._syncMatchPanels();
+    Match._buildBoard();
+  },
+
+  /** Guard: show start modal if board isn't active yet. Returns true if ok to proceed. */
+  _requireActive() {
+    if (Match._boardActive) return true;
+    Match._showStartModal();
+    return false;
+  },
+
+    // ── events ────────────────────────────────────────────────────────────────
 
   _bindEvents() {
     const svg=Match._view.el, area=document.getElementById('match-board-area');
@@ -698,20 +1155,15 @@ const Match = {
       if(nz!==oldZ){Match.viewOffset.x=mx-cx-bx*nz; Match.viewOffset.y=my-cy-by*nz; Match.viewZoom=nz; if(rafId)cancelAnimationFrame(rafId); rafId=requestAnimationFrame(updateTransform);}
     },{passive:false});
 
-    document.getElementById('btn-match-undo').addEventListener('click',       ()=>Match.undo());
-    document.getElementById('btn-match-clear').addEventListener('click',      ()=>{if(confirm('Clear match tree?'))Match.clear();});
-    document.getElementById('btn-match-reset-view').addEventListener('click', ()=>{ if(canPanZoom()){Match.viewOffset={x:0,y:0};Match.viewZoom=1;Match._buildBoard();} });
-    document.getElementById('btn-match-select').addEventListener('click', () => Match.toggleSelectMode());
+    document.getElementById('btn-match-undo')?.addEventListener('click',       ()=>Match.undo());
+    document.getElementById('btn-match-clear')?.addEventListener('click',      ()=>{if(confirm('Clear match tree?'))Match.clear();});
+    document.getElementById('btn-match-reset-view')?.addEventListener('click', ()=>{ if(canPanZoom()){Match.viewOffset={x:0,y:0};Match.viewZoom=1;Match._buildBoard();} });
+    document.getElementById('btn-match-select')?.addEventListener('click',    ()=>Match.toggleSelectMode());
 
-    const treePanel=document.getElementById('match-tree-panel'), handle=document.getElementById('match-tree-resize');
-    let isResizing=false;
-    const onResize=e=>{ if(!isResizing) return; treePanel.style.width=`${Math.max(150,Math.min(500,window.innerWidth-e.clientX))}px`; Match._buildBoard(); };
-    handle.addEventListener('mousedown', e=>{
-      isResizing=true; document.body.style.cursor='col-resize';
-      document.addEventListener('mousemove',onResize);
-      document.addEventListener('mouseup',()=>{isResizing=false;document.body.style.cursor='';document.removeEventListener('mousemove',onResize);},{once:true});
-      e.preventDefault();
+    document.getElementById('btn-match-save')?.addEventListener('click', () => {
+      if (Match._onSaveToLibrary) Match._onSaveToLibrary();
     });
+    // Resize handles wired by App._bindResizeHandles()
 
     window.addEventListener('resize',()=>{ if(UI.activeView==='match') Match._buildBoard(); });
   },

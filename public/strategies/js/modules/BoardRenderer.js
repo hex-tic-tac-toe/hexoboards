@@ -29,6 +29,7 @@ const BoardRenderer = {
       hover:   v('--hex-hover')    || '#262626',
       accent:  v('--accent')       || '#999',
       sel:     v('--sel-ring')     || '#66aaff',
+      win:     v('--win-ring')     || '#ffdd44',
     };
   },
 
@@ -68,7 +69,8 @@ const BoardRenderer = {
         opts.hover !== false,
         hId, colors,
         c.legal === true && c.state === 0,
-        sel ? sel.has(key) : false
+        sel ? sel.has(key) : false,
+        opts
       ));
     }
   },
@@ -99,7 +101,7 @@ const BoardRenderer = {
     return map;
   },
 
-  _createCell(ns, cell, cx, cy, R, label, hover, hId, colors, isLegal, selected) {
+  _createCell(ns, cell, cx, cy, R, label, hover, hId, colors, isLegal, selected, opts = {}) {
     const g = document.createElementNS(ns, 'g');
     g.dataset.q = cell.q; g.dataset.r = cell.r;
     g.dataset.cx = cx.toFixed(2); g.dataset.cy = cy.toFixed(2);
@@ -112,13 +114,14 @@ const BoardRenderer = {
     BoardRenderer._fill(face, cell.state, hId, colors, isLegal);
     g.appendChild(face);
 
-    // Selection ring (drawn over face, under label)
+    // Selection / win highlight ring
     if (selected) {
       const ring = document.createElementNS(ns, 'path');
       ring.setAttribute('d', HexLayout.hexPath(cx, cy, R, Math.max(1, R*0.04)));
       ring.setAttribute('fill', 'none');
-      ring.setAttribute('stroke', colors.sel);
-      ring.setAttribute('stroke-width', Math.max(1.5, R*0.09).toFixed(1));
+      const isWin = opts.selColor === 'win';
+      ring.setAttribute('stroke', isWin ? colors.win : colors.sel);
+      ring.setAttribute('stroke-width', Math.max(1.5, R * (isWin ? 0.13 : 0.09)).toFixed(1));
       ring.setAttribute('pointer-events', 'none');
       g.appendChild(ring);
     }
