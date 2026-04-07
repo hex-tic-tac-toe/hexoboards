@@ -466,6 +466,12 @@ const App = {
     document.getElementById('btn-match-import-close').addEventListener('click', () => {
       document.getElementById('match-import-modal').hidden = true;
     });
+    document.addEventListener('click', (e) => {
+      const modal = document.getElementById('match-import-modal');
+      if (modal && !modal.hidden && e.target === modal) {
+        modal.hidden = true;
+      }
+    });
     document.getElementById('btn-match-import-load').addEventListener('click', () => {
       const text = document.getElementById('match-import-ta')?.value.trim();
       if (!text) return;

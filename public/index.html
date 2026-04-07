@@ -174,39 +174,41 @@
     <button id="match-tree-toggle" class="active">tree</button>
   </div>
 
-  <!-- Import overlay -->
+  <!-- Import modal -->
   <div id="match-import-modal" class="match-import-modal" hidden>
-    <div class="match-import-hdr">
-      <span>IMPORT</span>
-      <button class="btn" id="btn-match-import-close">×</button>
-    </div>
-    <div class="match-import-body">
-      <div class="match-import-tabs">
-        <button class="btn match-import-tab active" data-tab="notation">Notation</button>
-        <button class="btn match-import-tab" data-tab="hexo">Hexo Games</button>
+    <div>
+      <div class="match-import-hdr">
+        <span>IMPORT</span>
+        <button class="btn" id="btn-match-import-close">×</button>
       </div>
-      <div id="match-import-notation" class="match-import-section">
-        <textarea id="match-import-ta" class="match-notation-ta" spellcheck="false"
-          placeholder="paste hextic notation  or  a hexoboards/gist link…" rows="4"></textarea>
-        <div class="match-import-actions">
-          <button class="btn" id="btn-match-import-load">load notation</button>
-          <button class="btn" id="btn-match-import-url">fetch URL</button>
+      <div class="match-import-body">
+        <div class="match-import-tabs">
+          <button class="btn match-import-tab active" data-tab="notation">Notation</button>
+          <button class="btn match-import-tab" data-tab="hexo">Hexo Games</button>
         </div>
+        <div id="match-import-notation" class="match-import-section">
+          <textarea id="match-import-ta" class="match-notation-ta" spellcheck="false"
+            placeholder="paste hextic notation  or  a hexoboards/gist link…" rows="4"></textarea>
+          <div class="match-import-actions">
+            <button class="btn" id="btn-match-import-load">load notation</button>
+            <button class="btn" id="btn-match-import-url">fetch URL</button>
+          </div>
+        </div>
+        <div id="match-import-hexo" class="match-import-section" hidden>
+          <div class="hexo-import-row">
+            <input type="text" id="hexo-game-id" placeholder="Game ID or URL (e.g. 880c1fec-...)">
+            <button class="btn" id="btn-hexo-import">Import</button>
+          </div>
+          <div class="hexo-recent-hdr">Recent Games</div>
+          <div id="hexo-recent-list" class="hexo-game-list"></div>
+          <div class="hexo-pager">
+            <button class="btn" id="btn-hexo-prev">←</button>
+            <span id="hexo-page">page 1</span>
+            <button class="btn" id="btn-hexo-next">→</button>
+          </div>
+        </div>
+        <div id="match-import-status" class="match-import-status"></div>
       </div>
-      <div id="match-import-hexo" class="match-import-section" hidden>
-        <div class="hexo-import-row">
-          <input type="text" id="hexo-game-id" placeholder="Game ID or URL (e.g. 880c1fec-...)">
-          <button class="btn" id="btn-hexo-import">Import</button>
-        </div>
-        <div class="hexo-recent-hdr">Recent Games</div>
-        <div id="hexo-recent-list" class="hexo-game-list"></div>
-        <div class="hexo-pager">
-          <button class="btn" id="btn-hexo-prev">←</button>
-          <span id="hexo-page">page 1</span>
-          <button class="btn" id="btn-hexo-next">→</button>
-        </div>
-      </div>
-      <div id="match-import-status" class="match-import-status"></div>
     </div>
   </div>
 </div>
