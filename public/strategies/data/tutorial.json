@@ -1,0 +1,627 @@
+{
+  "version": 1,
+  "doc": [
+    {
+      "type": "t",
+      "id": "tutorial-intro",
+      "md": "# Hexoboards — Complete User Tutorial\n\nHexoboards is a web application for editing, viewing, documenting, and sharing hexagonal Tic-Tac-Toe (HeXO) positions and games. It features a board editor, a match player with game trees, a library browser, a notation converter, and sharing tools.\n\n**Five main tabs** are accessible from the tab strip at the top-right of every screen:\n\n- **Editor** — place and arrange stones on a hex board\n- **Match** — play through games with a full game tree\n- **Browser** — browse and manage your position libraries\n- **Libraries** — add and manage external library sources\n- **Convert** — translate between notation formats",
+      "mono": false
+    },
+    {
+      "type": "s",
+      "id": "tutorial-editor",
+      "title": "1. Editor Tab",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "editor-overview",
+          "md": "The Editor is where you create and modify board positions. Click hexes to place X or O stones, add labels, rotate/mirror the board, and export in multiple notation formats.",
+          "mono": false
+        },
+        {
+          "type": "s",
+          "id": "editor-board-size",
+          "title": "1.1 Board Size",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-size-desc",
+              "md": "The board size controls the radius of the hex grid (2–32). The current size is shown as a letter (e.g. **s** for size 19) in the header.\n\n- Click **−** or **+** to decrease/increase by 1\n- Type a number directly into the size input and press **↵** (or Enter) to apply\n- Existing stones within the new radius are preserved when resizing",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-placing-stones",
+          "title": "1.2 Placing Stones",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-modes",
+              "md": "Three placement modes are available as buttons in the header:\n\n- **X** — every click places an X stone (clicking an X removes it)\n- **O** — every click places an O stone (clicking an O removes it)\n- **auto** (default) — alternates between X and O on each click; clicking an existing stone cycles through empty → X → O\n\n**Left-click** a hex to place or toggle a stone. **Left-click and drag** to paint multiple hexes at once — the action (place X, place O, or clear) is determined by the first hex you click.\n\n**Hold Ctrl** while clicking to clear stones regardless of mode.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-labels",
+          "title": "1.3 Labels",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-label-desc",
+              "md": "Labels annotate specific hexes with letters or numbers.\n\n- **Right-click** a hex to place a label\n- **Right-click and drag** to label multiple hexes\n- Labels auto-increment: a, b, c… (or 1, 2, 3… in number mode)\n- If a label already exists on a hex, right-clicking again replaces it with the next available mark\n- **Right-click + Ctrl** removes the label from a hex\n- Toggle between letter and number labels with the **a** button in the editor toolbar",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-transforms",
+          "title": "1.4 Rotate & Mirror",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-transform-desc",
+              "md": "Transform the entire board (stones and labels together):\n\n- **↺** — Rotate 60° counter-clockwise\n- **↻** — Rotate 60° clockwise\n- **⇔** — Mirror (flip across the vertical axis)\n\nThe history is cleared after a transform, so undo is not available for these operations.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-panels",
+          "title": "1.5 Side Panels",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-panels-desc",
+              "md": "Two optional panels slide in from the right side:\n\n**Note Panel** (toggle with the **note** button at bottom-right):\n- **Title** field — name your position\n- **Note** field — free-text notes (supports Markdown)\n- Drag the resize handle on the left edge to adjust width\n\n**Notation Panel** (toggle with the **notation** button):\n- Shows the current board in three notation formats simultaneously:\n  - **BKE** (Boat-Kaitlyn-Epic) — ring/offset notation, rotation-independent\n  - **HTN** (Hexagonal Tic Tac Toe Notation)\n  - **Axial** — raw (q,r) coordinates\n- Each format has a **⎘ copy** button and an **↑ load** button to import that notation back into the editor\n- Drag the resize handle to adjust width",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-save-share",
+          "title": "1.6 Save, Copy & Export",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-save-desc",
+              "md": "**★ Save** (or **Ctrl+S**) — saves the current position to your local library. The button shows **★ save** for new positions and **★ update** for existing ones. The footer shows **new** or **saved** status.\n\n**⎘ Copy link** — copies a URL to your clipboard that encodes the current board state in the URL hash. Anyone opening this link will see the exact same position.\n\n**⎘ Export** — opens the share modal where you can:\n- Publish to **Hexoboards Cloud** (Cloudflare-hosted, no account needed)\n- Create a **GitHub Gist** (requires a GitHub PAT)\n- Download as a **.json** file\n- Copy raw JSON to clipboard\n- Import from a share link\n\n**⎘ Image** — copies the board as a PNG image to your clipboard (2× resolution).",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-footer",
+          "title": "1.7 Footer Bar",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-footer-desc",
+              "md": "The footer at the bottom of the editor shows:\n\n- **Stone count** — X count, O count, and total\n- **Mode indicator** — **new** (unsaved) or **saved**\n- **Board hash** — the compact encoded string of the current position\n- **⎘ image** button to copy the board as a PNG",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-undo",
+          "title": "1.8 Undo",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-undo-desc",
+              "md": "Press **Ctrl+Z** to undo the last stone placement or label change. The editor maintains a full history stack. Note that rotate, mirror, and clear operations reset the history.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "editor-clear",
+          "title": "1.9 Clear Board",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "editor-clear-desc",
+              "md": "Click **✕ clear** in the header to remove all stones and labels. A confirmation dialog prevents accidental clears.",
+              "mono": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "s",
+      "id": "tutorial-match",
+      "title": "2. Match Tab",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "match-overview",
+          "md": "The Match tab is a full game-tree explorer. Play through games, explore variations, annotate positions, and watch bots play against each other. The game follows HeXO rules: X plays 1 stone on the first move, then both players play 2 stones per turn. The win condition is 6-in-a-row.",
+          "mono": false
+        },
+        {
+          "type": "s",
+          "id": "match-start",
+          "title": "2.1 Starting a Match",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-start-desc",
+              "md": "When you first enter the Match tab, a modal appears with three options:\n\n- **new game** — starts a fresh empty board\n- **resume saved game** — continues your last session (if one exists)\n- **import game** — opens the import modal to load a game from notation or Hexo Games",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-playing",
+          "title": "2.2 Playing Moves",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-play-desc",
+              "md": "**Click** an empty hex to place a stone for the current player. The game auto-detects whose turn it is.\n\nIf a move already exists at that position in the game tree, you **navigate** to that existing node instead of creating a new one — this lets you explore existing variations.\n\n**Click and drag** to pan the board when stones are present. **Scroll wheel** to zoom in/out (0.3× to 3×). Click **⌂ reset** to return to the default view.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-game-tree",
+          "title": "2.3 Game Tree",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-tree-desc",
+              "md": "The **Tree** panel (right side) shows the full game tree as a hierarchical structure:\n\n- The **current node** is highlighted\n- **Fork nodes** (positions with multiple continuations) show branching lines\n- **Click** any node to navigate to that position\n- **Arrow Up/Down** or **j/k** keys navigate the tree when the tree panel is focused\n- **Double-click** a child-of-fork node to collapse/expand its subtree (shown as `(N…)`)\n- Hover over a node to see the **label** button and **delete** button\n\n**Branch labels** — annotate any node with a label:\n- Hover a node and click **label** to open the label picker\n- Presets: ★ Forced win, ✗ Forced loss, !? Interesting, ? Mistake, ?? Blunder, ◈ Key position\n- Custom labels: enter any icon and text\n- Click an existing label to edit it, or **✕ clear** to remove",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-bots",
+          "title": "2.4 Bot Players",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-bots-desc",
+              "md": "The **Play** panel (left side) lets you assign bots to X and/or O:\n\n- Each player has a dropdown: select **human** or choose from available bots\n- The **▶** button places a single move for the selected bot\n- If a bot is assigned, it will automatically play its full turn (both stones) after the human plays\n- A **thinking…** indicator appears while the bot is calculating\n- Bots play with a 100ms delay between moves so you can follow along\n\nIf both players are bots, they will play the entire game automatically.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-eval",
+          "title": "2.5 Eval Bar",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-eval-desc",
+              "md": "The **eval bar** spans between the side panels below the toolbar. It shows a visual evaluation of the current position — the bar fills toward the side of the player with the advantage. This updates asynchronously after each move.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-win",
+          "title": "2.6 Win Detection",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-win-desc",
+              "md": "When a player completes 6-in-a-row:\n\n- The winning stones are highlighted on the board\n- A **win popup** appears showing the winner, stone counts, total moves, and run length\n- **continue** — closes the popup and lets you keep playing from that position (new branch)\n- **new game** — clears the board and starts fresh\n- Press **Escape** to close the popup",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-area-select",
+          "title": "2.7 Area Selection",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-select-desc",
+              "md": "Extract a region of the board to the Editor:\n\n1. Click **◻ select** in the toolbar to enter selection mode\n2. **Click and drag** on a hex to define a hexagonal region (radius shown in the toolbar)\n3. On release, all occupied stones in the region are automatically sent to the Editor\n4. Selection mode exits automatically after extraction\n\nThe extracted region is translated so the anchor hex becomes the origin, centering it on the editor board.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-snapshot",
+          "title": "2.8 Send to Editor",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-snapshot-desc",
+              "md": "Click **→ editor** in the toolbar to send the current board position to the Editor tab. This is useful for studying a specific position from a game in detail.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-notes",
+          "title": "2.9 Match Notes",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-notes-desc",
+              "md": "The **Note** panel in Match lets you add a title and notes to the game:\n\n- **Title** — name your match\n- **Notes** — free-text annotations\n- **★ save to library** — saves the entire game as a match entry (compact notation format) to your local library\n- After saving, the button changes to **★ update**",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-import",
+          "title": "2.10 Import Games",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-import-desc",
+              "md": "Click **import** in the header to open the import modal with two tabs:\n\n**Notation tab:**\n- Paste hextic notation or a hexoboards/gist link into the text area\n- **load notation** — parses and loads the notation directly\n- **fetch URL** — fetches and loads from a remote URL\n\n**Hexo Games tab:**\n- Enter a **Game ID** or full URL from hexo.did.science\n- Click **Import** to fetch and load the game\n- Browse **Recent Games** with pagination (← → buttons)\n\nSupported import formats:\n- Hextic notation (JSON array of Cantor-paired coordinates)\n- Axial format (JSON array of [q,r] pairs)\n- Hexoboards share links\n- GitHub Gist links\n- Hexo Games URLs/IDs",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-controls",
+          "title": "2.11 Match Controls",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-controls-desc",
+              "md": "Header buttons:\n- **new** — show the start modal (new game / resume / import)\n- **import** — open the import modal\n- **↩** — undo (go to parent node in the tree)\n- **✕** — clear the entire match tree (with confirmation)\n- **★** — save the match to library\n- **⎘** — export/share the match\n\nKeyboard shortcuts:\n- **Ctrl+Z** — undo (navigate to parent node)\n- **Ctrl+S** — save match to library",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "match-panels",
+          "title": "2.12 Panel Layout",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "match-panels-desc",
+              "md": "Three panels can be toggled via buttons at the bottom-right:\n\n- **play** — bot controls (left side)\n- **note** — match title and notes (right side)\n- **tree** — game tree viewer (far right)\n\nEach panel has a resize handle on its edge. Click the toggle buttons to show/hide panels. Active panels are highlighted.",
+              "mono": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "s",
+      "id": "tutorial-browser",
+      "title": "3. Browser Tab",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "browser-overview",
+          "md": "The Browser tab is your library viewer. It displays positions, match games, sections, and text content in a document-like structure. You can navigate between different libraries using the sidebar.",
+          "mono": false
+        },
+        {
+          "type": "s",
+          "id": "browser-sidebar",
+          "title": "3.1 Library Sidebar",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "browser-sidebar-desc",
+              "md": "The left sidebar lists all available libraries:\n\n- **My Positions** — your local editable library (always present)\n- **Hexopedia** — community encyclopedia of HeXO theory (read-only)\n- **Mates** — collection of mating patterns (read-only)\n- Any remote libraries you've added via the Libraries tab\n\nClick a library name to view its contents. When a remote library is selected, its sections appear indented below it in the sidebar for quick navigation. Click a section name to scroll to it.\n\nThe sidebar is resizable — drag the right edge.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "browser-document",
+          "title": "3.2 Document Structure",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "browser-doc-desc",
+              "md": "Libraries are structured documents with four node types:\n\n**Sections** (collapsible containers):\n- Click the **▾/▸** arrow or the section header to collapse/expand\n- Sections can contain other sections, text, positions, and matches\n- In editable libraries, section titles are inline-editable (click to edit)\n- The **🔗** button copies a direct link to that section\n- **+section**, **+text**, **+pos** buttons add child content\n- **✕** deletes the section and all its contents\n\n**Text nodes** (Markdown content):\n- Rendered as formatted Markdown with links, lists, headings, etc.\n- Click to edit — a textarea opens for editing raw Markdown\n- Press **Escape** to finish editing and return to rendered view\n- The **{ }** button toggles monospace raw view\n\n**Position nodes** (board thumbnails):\n- Show a rendered board thumbnail with title and note\n- **open** — opens the position in the Editor\n- **edit** — opens in the Editor for modification (editable libraries only)\n- **→ match** — opens as a match game (if hextic notation is present)\n- **Double-click** any position to open it in the Editor\n- **✕** deletes the position (editable libraries only)\n\n**Match nodes** (saved games):\n- Show title, date, move count, and note preview\n- **open** — opens the full game in the Match tab\n- **Double-click** to open in Match\n- **✕** deletes the match (editable libraries only)",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "browser-toolbar",
+          "title": "3.3 Browser Toolbar",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "browser-toolbar-desc",
+              "md": "The toolbar at the top of the browser provides:\n\n- **Search** (⌕) — filter visible nodes by text content. **Ctrl+F** focuses the search. The **✕** button clears the search.\n- **⊞** — toggle compact grid view (smaller card layout)\n- **▸▸** — collapse all sections at once\n- **▾▾** — expand all sections at once\n- **⎘ export** — export the current library as JSON\n\nThe **↑** back-to-top button appears when you scroll down.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "browser-drag",
+          "title": "3.4 Drag & Drop",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "browser-drag-desc",
+              "md": "In editable libraries, all nodes have a **⠿** drag handle. Drag nodes to reorder them — drop onto another node to move before it. This works for sections, text, positions, and matches.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "browser-add",
+          "title": "3.5 Adding Content",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "browser-add-desc",
+              "md": "In editable libraries, **+** bars appear between nodes and at the top/bottom of sections:\n\n- **+section** — adds a new collapsible section at that position\n- **+text** — adds a new Markdown text node\n- **+pos** — opens the Editor to create a new position; when saved, it's inserted at that location\n\nYou can also use the **★ save** button in the Editor — if you navigated from the Browser, the position is inserted at the context you came from.",
+              "mono": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "s",
+      "id": "tutorial-libraries",
+      "title": "4. Libraries Tab",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "libraries-overview",
+          "md": "The Libraries tab manages your library sources — both local and remote.",
+          "mono": false
+        },
+        {
+          "type": "s",
+          "id": "libraries-remote",
+          "title": "4.1 Adding Remote Libraries",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "libraries-remote-desc",
+              "md": "Add a library from any JSON URL:\n\n1. Enter a **name** (e.g. \"My Openings\")\n2. Enter the **URL** (Pastebin raw, GitHub raw, or any direct JSON link)\n3. Click **+ add**\n\nThe library is fetched immediately and appears in the sidebar. Remote libraries are read-only by default.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "libraries-manage",
+          "title": "4.2 Managing Libraries",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "libraries-manage-desc",
+              "md": "Each library in the list shows its name, URL, and position count. Actions vary by type:\n\n**Local libraries** (My Positions and workspaces):\n- **⬇ export** — download the library as a .json file\n- **⎘ copy** — copy the library JSON to clipboard\n- **↺ reset** — clear all positions (My Positions only)\n- **✕** — delete the workspace\n\n**Remote libraries:**\n- **●/○** — toggle active/inactive (inactive libraries aren't fetched)\n- Click the name to **rename** inline\n- **↺ reload** — re-fetch from the source URL\n- **⎘ workspace** — open as an editable local copy (workspace)\n- **✕** — remove the library\n\nAt the bottom, **✕ clear all data** wipes everything and reloads the page.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "libraries-workspaces",
+          "title": "4.3 Workspaces",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "libraries-workspace-desc",
+              "md": "A **workspace** is an editable local copy of a remote library. Click **⎘ workspace** on any remote library to create one. The workspace is independent — changes don't affect the original. You can edit, add, delete, and drag-drop content freely. Delete workspaces when no longer needed.",
+              "mono": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "s",
+      "id": "tutorial-convert",
+      "title": "5. Convert Tab",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "convert-overview",
+          "md": "The Convert tab translates board positions between different notation formats.",
+          "mono": false
+        },
+        {
+          "type": "s",
+          "id": "convert-usage",
+          "title": "5.1 How to Convert",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "convert-usage-desc",
+              "md": "1. Select the source format in the **from** dropdown\n2. Paste notation into the left text area\n3. Select the target format in the **to** dropdown\n4. Click **→** to convert\n5. The result appears in the right text area\n\n**← editor** — loads the current Editor board into the input area in the selected source format.\n\n**⎘ copy** — copies the output to clipboard.\n\n**↑ editor** — loads the converted result into the Editor tab.\n\n**batch** mode — check this box when the input is a JSON array of notation strings. The output will be a JSON array of converted results.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "convert-formats",
+          "title": "5.2 Supported Formats",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "convert-formats-desc",
+              "md": "The available formats are determined by the Notation.FORMATS registry. Currently supported:\n\n- **HTN** — Hexagonal Tic Tac Toe Notation\n- **BKE** — Boat-Kaitlyn-Epic (ring/offset, rotation-independent)\n- **Axial** — Raw (q,r) coordinate pairs\n\nAdditional formats may be added to the registry and will automatically appear here.",
+              "mono": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "s",
+      "id": "tutorial-sharing",
+      "title": "6. Sharing & Export",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "sharing-overview",
+          "md": "Hexoboards supports multiple ways to share positions, matches, and libraries.",
+          "mono": false
+        },
+        {
+          "type": "s",
+          "id": "sharing-url",
+          "title": "6.1 URL Links",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "sharing-url-desc",
+              "md": "**Board links** — In the Editor, click **⎘ copy link** to copy a URL with the board encoded in the hash. Opening this URL restores the exact position.\n\n**Section links** — In the Browser, click the **🔗** button on any section header to copy a direct link to that section.\n\n**Tab navigation:**\n- `#b/libraryId/sectionId` — Browser tab with specific library and section\n- `#m` — Match tab\n- `#d` — Libraries tab\n- `#c` — Convert tab\n- Empty or board hash — Editor tab",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "sharing-cloud",
+          "title": "6.2 Hexoboards Cloud",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "sharing-cloud-desc",
+              "md": "Publish any editor board, match, or library to the cloud:\n\n1. Click the **⎘** (export) button in the relevant tab\n2. Select **Hexoboards Cloud** in the share modal\n3. Click **publish & copy link**\n4. The link is copied to your clipboard — share it with anyone\n\nCloud snapshots are hosted on Cloudflare Durable Objects — public, immutable, and requiring no account.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "sharing-gist",
+          "title": "6.3 GitHub Gist",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "sharing-gist-desc",
+              "md": "Share via GitHub Gist:\n\n1. Enter your **GitHub PAT** (personal access token with \"gist\" scope) in the authentication field\n2. Click **authenticate** (token is not stored)\n3. Click **create & copy link** to publish\n4. Browse, load, save, or delete your existing hexoboards gists from the list\n\nThe token is only used for the current session and is never stored.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "sharing-import",
+          "title": "6.4 Import from Link",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "sharing-import-desc",
+              "md": "In the share modal, the **Import from link** section at the bottom accepts:\n\n- Hexoboards Cloud share URLs\n- GitHub Gist URLs\n- Any URL containing a `#remote/` hash fragment\n\nPaste the URL and click **load** to import the shared content.",
+              "mono": false
+            }
+          ]
+        },
+        {
+          "type": "s",
+          "id": "sharing-download",
+          "title": "6.5 Download JSON",
+          "collapsed": false,
+          "children": [
+            {
+              "type": "t",
+              "id": "sharing-download-desc",
+              "md": "Every share modal includes **Local only** options:\n\n- **download .json** — saves a JSON file to your computer\n- **copy JSON** — copies raw JSON to clipboard\n\nThese work for editor boards, matches, and entire libraries.",
+              "mono": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "s",
+      "id": "tutorial-keyboard",
+      "title": "7. Keyboard Shortcuts",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "keyboard-shortcuts",
+          "md": "| Shortcut | Action |\n|---|---|\n| **Ctrl+S** | Save (Editor or Match) |\n| **Ctrl+Z** | Undo (Editor: last action; Match: go to parent node) |\n| **Ctrl+F** | Focus browser search (switches to Browser tab if needed) |\n| **Enter** | Apply board size (when size input is focused) |\n| **Escape** | Close text editing (Browser) or win popup (Match) |\n| **Arrow Up/Down** or **j/k** | Navigate game tree (when tree panel is focused) |\n| **Double-click** | Open position in Editor / Open match in Match (Browser) |\n| **Double-click** | Collapse/expand subtree (Match tree, child-of-fork nodes) |",
+          "mono": false
+        }
+      ]
+    },
+    {
+      "type": "s",
+      "id": "tutorial-persistence",
+      "title": "8. Data Persistence",
+      "collapsed": false,
+      "children": [
+        {
+          "type": "t",
+          "id": "persistence-desc",
+          "md": "All data is stored in your browser's **localStorage**:\n\n- **Editor state** — auto-saved on every change (board, labels, notes, panel states)\n- **Match state** — auto-saved on every move (game tree, view position, panel states)\n- **Libraries** — local libraries and their documents\n- **Preferences** — compact view toggle\n\nData persists across page reloads and browser restarts. Use **✕ clear all data** in the Libraries tab to wipe everything.\n\nOn first visit, default libraries (Hexopedia, Mates) are automatically fetched and cached.",
+          "mono": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,10 @@
 {
   "libraries": [
     {
+      "name": "Tutorial",
+      "url": "/strategies/data/tutorial.json"
+    },
+    {
       "name": "Hexopedia",
       "url": "/strategies/data/hexopedia.json"
     },
