@@ -84,9 +84,21 @@ const App = {
     const hash = window.location.hash.slice(1);
 
     // Remote paste link (#remote/SERVICE/ID/TAB) — fetch and reconstruct
-    if (hash.startsWith('remote/')) {
-      App._handleRemoteHash(hash).then(() => {});
-      history.replaceState(null, '', location.pathname);
+    const shareMatch = location.pathname.match(/^\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)\/?$/);
+    if (shareMatch) {
+      const tab = shareMatch[1];
+      const id = shareMatch[2];
+      App._toast('loading…');
+      try {
+        const text = await Share.fetchRemote('cf', id);
+        App._loadImportedData(tab, JSON.parse(text));
+        history.replaceState(null, '', location.pathname);
+      } catch (e) { App._toast('failed: ' + e.message); }
+    } else if (hash.startsWith('remote/')) {
+      try {
+        await App._handleRemoteHash(hash);
+        history.replaceState(null, '', location.pathname);
+      } catch (e) { App._toast('failed: ' + e.message); }
     }
 
     // Board hash or empty → restore from localStorage or URL
