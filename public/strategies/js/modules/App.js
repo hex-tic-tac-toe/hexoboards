@@ -76,6 +76,8 @@ const App = {
         Editor.labels = decoded.labels.map(l => ({ ...l, mark: l.mark ?? l.letter ?? 'a' }));
         document.getElementById('input-size').value = decoded.grid.s;
         Editor.noteOpen = decoded.labels.length > 0;
+        Editor._syncPanels();
+        Editor._syncMode();
       } else { Editor.loadNode(null); }
     } else if (!Editor._loadState()) {
       // No URL board, no saved state → fresh board
@@ -161,21 +163,6 @@ const App = {
     App._toast('loaded');
   },
 
-  _importMulti(entries, fmtId) {
-    const libId  = (Browser.activeLibId && Store.isLocal(Browser.activeLibId)) ? Browser.activeLibId : Store.LOCAL;
-    const docObj = Store.getDoc(libId);
-    const tree   = docObj?.doc || [];
-    let count    = 0;
-    for (const text of entries) {
-      const grid = Notation.gridFromFmt(text, fmtId);
-      if (!grid) continue;
-      tree.push(Doc.pos(URLCodec.encode(grid), '', text.slice(0, 60), []));
-      count++;
-    }
-    Store.saveDoc(libId, tree);
-    App._toast(`imported ${count} position${count !== 1 ? 's' : ''}`);
-    if (UI.activeView === 'browser') Browser.render(libId);
-  },
 
   // ── save ──────────────────────────────────────────────────────────────────
 

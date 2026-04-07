@@ -242,7 +242,7 @@ const Browser = {
 
     // Drag handle before board (editable only)
     if (Browser._editable) {
-      const h = Browser._el('span', 'drag-handle', '\u2837'); h.draggable = false;
+      const h = Browser._el('span', 'drag-handle', '⠿'); h.draggable = false;
       el.appendChild(h);
     }
     el.appendChild(boardWrap);

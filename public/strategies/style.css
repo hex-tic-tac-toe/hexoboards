@@ -434,6 +434,7 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
 }
 .share-upload-btn:hover:not(:disabled) { background: var(--accent); color: #000; }
 .share-status { font-size: 11px; min-height: 16px; color: var(--dim); }
+.share-status-sec { padding: 8px 14px; min-height: 28px; }
 .share-status.ok  { color: #6c6; }
 .share-status.err { color: #c55; }
 .share-paste-result { display: flex; flex-direction: column; gap: 3px; padding-top: 4px; }

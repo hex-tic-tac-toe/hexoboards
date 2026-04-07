@@ -13,6 +13,7 @@
  *   Editor.onBoardSync        — callback(grid) fired after each board change
  */
 import { HexGrid }   from './HexGrid.js';
+import { Store }     from './Store.js';
 import { BoardView } from './BoardView.js';
 import { URLCodec }  from './URLCodec.js';
 import { Layout }    from './Layout.js';
@@ -43,7 +44,7 @@ const Editor = {
   _saveState() {
     if (!Editor.grid) return;
     try {
-      localStorage.setItem('hexoboards-editor', JSON.stringify({
+      localStorage.setItem(Store._K.editor, JSON.stringify({
         board:       URLCodec.encode(Editor.grid),
         labels:      Editor.labels.map(l => [l.q, l.r, l.mark]),
         noteOpen:    Editor.noteOpen,
@@ -59,7 +60,7 @@ const Editor = {
   /** Returns true if state was restored from localStorage. */
   _loadState() {
     try {
-      const raw = localStorage.getItem('hexoboards-editor');
+      const raw = localStorage.getItem(Store._K.editor);
       if (!raw) return false;
       const data = JSON.parse(raw);
       const grid = URLCodec.decode(data.board);

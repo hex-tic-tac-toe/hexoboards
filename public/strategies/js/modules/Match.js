@@ -71,6 +71,7 @@ const Match = {
   selectionMode:  false,
   selectedCells:  null,       // Set<"q,r"> or null
   _selAnchor:     null,
+  _selRadius:     0,
   _selCache:      null,       // visible cells cached during drag
   _selRafId:      null,
 
