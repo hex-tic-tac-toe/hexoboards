@@ -27,24 +27,25 @@
     <button class="btn" id="btn-apply-size">↵</button>
     <span class="sep" style="margin-left:4px">—</span>
     <button class="btn" id="btn-clear">✕ clear</button>
-    <button class="btn save" id="btn-save" data-tip="Save (Ctrl+S)">★ save</button>
+    <span class="sep" style="margin:0 6px">—</span>
+    <button class="btn" id="btn-mode-x" data-tip="Place X">X</button>
+    <button class="btn" id="btn-mode-o" data-tip="Place O">O</button>
+    <button class="btn active" id="btn-mode-auto" data-tip="Auto-alternates X/O">auto</button>
+    <span class="sep" style="margin:0 6px">—</span>
+    <button class="btn" id="btn-rotate-ccw" data-tip="Rotate 60° CCW">↺</button>
+    <button class="btn" id="btn-rotate-cw"  data-tip="Rotate 60° CW">↻</button>
+    <button class="btn" id="btn-mirror"     data-tip="Mirror">⇔</button>
+    <span style="flex:1"></span>
+    <button class="btn save" id="btn-save" data-tip="Save (Ctrl+S)">★</button>
+    <button class="btn" id="btn-copy-board" data-tip="Copy link">⎘</button>
     <!-- Tab strip buttons injected by UI.init() -->
     <nav class="tab-strip"></nav>
   </div>
 
   <div class="editor-toolbar">
-    <span class="toolbar-label">place</span>
-    <button class="btn"        id="btn-mode-x">X</button>
-    <button class="btn"        id="btn-mode-o">O</button>
-    <button class="btn active" id="btn-mode-auto" data-tip="Auto-alternates X/O">auto</button>
-    <span class="sep" style="margin:0 6px">—</span>
     <span class="toolbar-label">label</span>
     <button class="btn" id="btn-label-mode" data-tip="Toggle letter/number labels">a</button>
     <span class="toolbar-hint">left-drag stones · right-drag labels · ctrl clears</span>
-    <span class="sep" style="margin:0 6px">—</span>
-    <button class="btn" id="btn-rotate-ccw" data-tip="Rotate 60° CCW">↺</button>
-    <button class="btn" id="btn-rotate-cw"  data-tip="Rotate 60° CW">↻</button>
-    <button class="btn" id="btn-mirror"     data-tip="Mirror (vertical axis)">⇔</button>
   </div>
 
   <div id="board-area"><svg id="board-svg"></svg></div>
@@ -108,7 +109,6 @@
     <span id="footer-stones">X: 0  O: 0  total: 0</span>
     <span id="editor-mode" class="footer-mode">new</span>
     <span id="footer-hash"></span>
-    <button class="btn" id="btn-copy-board"    data-tip="Copy board link">⎘ board link</button>
     <button class="btn" id="btn-share-editor" data-tip="Export editor board">⎘ export</button>
     <button class="btn" id="btn-copy-image" data-tip="Copy board as PNG">⎘ image</button>
   </div>
@@ -120,26 +120,26 @@
     <span class="title">HEXOBOARDS</span>
     <span class="sep">—</span>
     <span style="color:var(--muted);font-size:10px">match</span>
+    <span class="sep" style="margin:0 6px">—</span>
+    <button class="btn" id="btn-match-new"         data-tip="New / import">new</button>
+    <button class="btn" id="btn-match-import"      data-tip="Import notation or URL">import</button>
+    <span class="sep" style="margin:0 6px">—</span>
+    <button class="btn" id="btn-match-undo"        data-tip="Undo (Ctrl+Z)">↩</button>
+    <button class="btn" id="btn-match-clear"                               >✕</button>
+    <span style="flex:1"></span>
+    <span class="turn-indicator" id="match-turn">X's turn</span>
+    <span class="sep" style="margin:0 8px">—</span>
+    <span id="match-move-count">move 0</span>
+    <span class="sep" style="margin:0 6px">—</span>
+    <button class="btn save" id="btn-match-save"    data-tip="Save">★</button>
+    <button class="btn" id="btn-share-match"       data-tip="Export">⎘</button>
     <nav class="tab-strip"></nav>
   </div>
 
   <div class="match-toolbar">
-    <button class="btn" id="btn-match-new"         data-tip="New game or load">new</button>
-    <button class="btn" id="btn-match-import"      data-tip="Import notation or URL">import</button>
-    <span class="sep" style="margin:0 6px">—</span>
-    <button class="btn" id="btn-match-undo"        data-tip="Undo (Ctrl+Z)">↩</button>
-    <button class="btn" id="btn-match-clear"                               >✕ clear</button>
-    <button class="btn" id="btn-match-reset-view"  data-tip="Reset pan / zoom">⌂</button>
+    <button class="btn" id="btn-match-reset-view"  data-tip="Reset pan / zoom">⌂ reset</button>
     <button class="btn" id="btn-match-select"      data-tip="Select area to extract">◻ select</button>
     <button class="btn" id="btn-match-snapshot"    data-tip="Send board to Editor">→ editor</button>
-    <span class="sep" style="margin:0 6px">—</span>
-    <span class="turn-indicator" id="match-turn">X's turn</span>
-    <span class="sep">—</span>
-    <span id="match-move-count">move 0</span>
-    <span id="match-sel-info" class="match-sel-info" hidden></span>
-    <span style="flex:1"></span>
-    <button class="btn" id="btn-match-save"        data-tip="Save match (auto-saves on every move)">★ save</button>
-    <button class="btn" id="btn-share-match"       data-tip="Export match history">⎘ export</button>
   </div>
 
   <!-- Eval bar — spans between the side panels, below toolbar -->
