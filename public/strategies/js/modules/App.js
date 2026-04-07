@@ -1,92 +1,173 @@
+/**
+ * App — central initialisation and event wiring.
+ *
+ * Hash routing:
+ *   (empty / board code)  → Editor
+ *   #m  (legacy #a)       → Match
+ *   #b/<libId>/<secId>    → Browser
+ *   #d                    → Libraries
+ *   #c                    → Convert
+ *   #remote/dpaste/ID/tab → fetch from paste service and reconstruct
+ */
+
 import { HexGrid }    from './HexGrid.js';
 import { Store }      from './Store.js';
 import { Doc }        from './Doc.js';
 import { Editor }     from './Editor.js';
-import { Analyzer }   from './Analyzer.js';
+import { Match, MatchNode } from './Match.js';
 import { Browser }    from './Browser.js';
 import { LibManager } from './LibManager.js';
 import { URLCodec }   from './URLCodec.js';
 import { Notation }   from './Notation.js';
+import { Source }     from './Source.js';
+import { Share }      from './Share.js';
 import { UI }         from './UI.js';
-import { HTN }        from './HTN.js';
 import { Layout }     from './Layout.js';
 
+
 const App = {
+
   async init() {
     Store.load();
     App._initTheme();
+
+    // Build dynamic tab strips
+    UI.init({
+      editor:  () => UI.showEditor(()  => Editor._buildBoard()),
+      match:   () => UI.showMatch(()   => Match._buildBoard()),
+      browser: () => UI.showBrowser(() => Browser.render(Browser.activeLibId || Store.LOCAL)),
+      data:    () => UI.showData(()    => LibManager.render()),
+      convert: () => UI.showConvert(() => {}),
+    });
+
+    // Format selects from Notation.FORMATS registry
+    App._initFormatSelects();
+
     Browser.init(node => { Editor.loadNode(node || null); UI.showEditor(() => Editor._buildBoard()); });
     LibManager.init(App._toast);
 
+    Editor.init();
+    Editor.onBoardSync = App._updateNotationPanel;
+    Editor.bindPointer();
+
+    // Match → Editor bridge
+    Match.onExtract = grid => {
+      Editor.loadGrid(grid);
+      UI.showEditor(() => Editor._buildBoard());
+      App._toast('selection → editor');
+    };
+
+    // Resolve startup hash
     const hash = window.location.hash.slice(1);
-    const boardNav = !hash.startsWith('b/') && hash !== 'd' && hash !== 'c' && hash !== 'a' && hash;
-    if (boardNav) {
-      const decoded = URLCodec.decodeFull(boardNav);
+
+    // Remote paste link (#remote/SERVICE/ID/TAB) — fetch and reconstruct
+    if (hash.startsWith('remote/')) {
+      App._handleRemoteHash(hash).then(() => {});
+      history.replaceState(null, '', location.pathname);
+    }
+
+    // Board hash or empty → restore from localStorage or URL
+    const isBoardHash = hash && !hash.startsWith('b/') && !hash.startsWith('remote/')
+      && hash !== 'd' && hash !== 'c' && hash !== 'm' && hash !== 'a';
+    if (isBoardHash) {
+      const decoded = URLCodec.decodeFull(hash);
       if (decoded) {
         Editor.grid   = decoded.grid;
         Editor.labels = decoded.labels.map(l => ({ ...l, mark: l.mark ?? l.letter ?? 'a' }));
         document.getElementById('input-size').value = decoded.grid.s;
         Editor.noteOpen = decoded.labels.length > 0;
       } else { Editor.loadNode(null); }
-    } else { Editor.loadNode(null); }
+    } else if (!Editor._loadState()) {
+      // No URL board, no saved state → fresh board
+      Editor.loadNode(null);
+    } else {
+      // State loaded; sync UI panels
+      Editor._syncPanels();
+      Editor._syncFooter();
+      Editor._syncMode();
+    }
 
-    Editor.bindPointer();
-    Editor.onBoardSync = App._updateNotationPanel;
     App._bindEvents();
     App._bindResizeHandles();
     App._initTooltips();
     App._initCompact();
-    UI.init(() => Editor._buildBoard());
 
-    Analyzer._load();
-    Analyzer.init();
+    Match._load();
+    Match.init();
 
     await Store.fetchDefaults();
     await Store.fetchAllActive();
     Browser._renderNav();
 
+    // Route to view
     if (hash.startsWith('b/')) {
       const parts = hash.slice(2).split('/');
       const libId = parts[0] || Store.LOCAL;
       const secId = parts[1] || null;
-      const validLib = Store.libs[libId] || Store.libs[Store.LOCAL];
       UI.showBrowser(() => {
-        Browser.render(validLib ? libId : Store.LOCAL, true);
+        Browser.render(Store.libs[libId] ? libId : Store.LOCAL, true);
         if (secId) setTimeout(() => Browser.scrollToSection(secId), 150);
       });
-    } else if (hash === 'd') {
-      UI.showData(() => LibManager.render());
-    } else if (hash === 'c') {
-      UI.showConvert(() => {});
-    } else if (hash === 'a') {
-      UI.showAnalyze(() => Analyzer._buildBoard());
-    } else {
-      UI.showEditor(() => Editor._buildBoard());
-    }
+    } else if (hash === 'd') { UI.showData(() => LibManager.render()); }
+    else if (hash === 'c')   { UI.showConvert(() => {}); }
+    else if (hash === 'm' || hash === 'a') { UI.showMatch(() => Match._buildBoard()); }
+    else { UI.showEditor(() => Editor._buildBoard()); }
   },
+
+  // ── remote hash: fetch from paste service and reconstruct ──────────────────
+
+  async _handleRemoteHash(hash) {
+    const remote = Share.parseRemoteHash(hash);
+    if (!remote) { App._toast('invalid link'); return; }
+    App._toast('loading…');
+    try {
+      const text = await Share.fetchRemote(remote.service, remote.id);
+      App._loadImportedData(remote.tab, JSON.parse(text));
+    } catch (e) { App._toast('failed: ' + e.message); }
+  },
+
+  /** Load fetched data into the appropriate tab. Used by remote hash and share modal import. */
+  _loadImportedData(tab, data) {
+    if (tab === 'editor' && (data.type === 'hexoboards-board' || data.board)) {
+      const grid = URLCodec.decode(data.board);
+      if (grid) { Editor.loadGrid(grid); UI.showEditor(() => Editor._buildBoard()); App._toast('board loaded'); }
+    } else if (tab === 'match' && data.type === 'hexoboards-match' && data.tree) {
+      MatchNode.resetId();
+      Match.tree        = Match._deserialize(data.tree);
+      Match.currentNode = Match.tree;
+      Match._collapsedChildren.clear();
+      Match._save();
+      UI.showMatch(() => { Match._renderTree(); Match._buildBoard(); });
+      App._toast('match loaded');
+    } else { App._toast('unrecognised format'); }
+  },
+
+  // ── notation panel ────────────────────────────────────────────────────────
 
   _updateNotationPanel(grid) {
     if (!grid || !Editor.notationOpen) return;
-    document.getElementById('nf-bke').value   = Notation.gridToBKE(grid);
-    document.getElementById('nf-htn').value   = Notation.gridToHTN(grid);
-    document.getElementById('nf-axial').value = Notation.gridToAxial(grid);
+    for (const [id, fmt] of Object.entries(Notation.FORMATS)) {
+      const el = document.getElementById('nf-' + id);
+      if (el) el.value = fmt.encode(grid);
+    }
   },
+
+  // ── import pipeline ───────────────────────────────────────────────────────
 
   _importSingle(grid) {
     if (!grid) { App._toast('parse error'); return; }
-    Editor.grid    = grid; Editor.labels  = []; Editor.history = []; Editor.nodeId  = null;
-    document.getElementById('input-size').value = grid.s;
-    Editor._buildBoard(); Editor._syncFooter(); Editor._syncMode();
-    UI.showEditor(() => {}); App._toast('loaded');
+    Editor.loadGrid(grid);
+    UI.showEditor(() => Editor._buildBoard());
+    App._toast('loaded');
   },
 
-  _importMulti(entries, fmt) {
+  _importMulti(entries, fmtId) {
     const libId  = (Browser.activeLibId && Store.isLocal(Browser.activeLibId)) ? Browser.activeLibId : Store.LOCAL;
     const docObj = Store.getDoc(libId);
     const tree   = docObj?.doc || [];
     let count    = 0;
     for (const text of entries) {
-      const grid = Notation.gridFromFmt(text, fmt);
+      const grid = Notation.gridFromFmt(text, fmtId);
       if (!grid) continue;
       tree.push(Doc.pos(URLCodec.encode(grid), '', text.slice(0, 60), []));
       count++;
@@ -96,6 +177,8 @@ const App = {
     if (UI.activeView === 'browser') Browser.render(libId);
   },
 
+  // ── save ──────────────────────────────────────────────────────────────────
+
   _save() {
     Editor.note  = document.getElementById('note-text').value;
     Editor.title = document.getElementById('title-text').value;
@@ -104,6 +187,7 @@ const App = {
     const tree   = docObj?.doc || [];
     const board  = URLCodec.encode(Editor.grid);
     const labels = Editor.labels.map(l => [l.q, l.r, l.mark]);
+
     if (Editor.nodeId) {
       const found = Doc.find(tree, Editor.nodeId);
       if (found) {
@@ -123,187 +207,200 @@ const App = {
     App._toast('saved');
   },
 
+  // ── format selects ────────────────────────────────────────────────────────
+
+  _initFormatSelects() {
+    const fromSel = document.getElementById('conv-from');
+    const toSel   = document.getElementById('conv-to');
+    for (const [id, { label }] of Object.entries(Notation.FORMATS)) {
+      fromSel.appendChild(Object.assign(document.createElement('option'), { value: id, textContent: label }));
+      toSel.appendChild(  Object.assign(document.createElement('option'), { value: id, textContent: label }));
+    }
+    fromSel.value = 'htn'; toSel.value = 'bke';
+  },
+
+  // ── event binding ─────────────────────────────────────────────────────────
+
   _bindEvents() {
+    // Size controls
     const si = document.getElementById('input-size');
     const applySize = () => {
       const s = parseInt(si.value, 10); if (s < 2 || s > 32) return;
-      const prev  = Editor.grid;
-      const next  = HexGrid.create(s);
-      const max   = s - 1;
-      const dist  = (q, r) => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+      const prev = Editor.grid, next = HexGrid.create(s), max = s - 1;
+      const dist = (q, r) => (Math.abs(q)+Math.abs(r)+Math.abs(q+r))/2;
       if (prev) {
-        for (const c of prev.cells.values())
-          if (c.state && dist(c.q, c.r) <= max) HexGrid.setState(next, c.q, c.r, c.state);
-        Editor.labels = Editor.labels.filter(l => dist(l.q, l.r) <= max);
+        for (const c of prev.cells.values()) if (c.state && dist(c.q,c.r)<=max) HexGrid.setState(next,c.q,c.r,c.state);
+        Editor.labels = Editor.labels.filter(l => dist(l.q,l.r)<=max);
       }
-      Editor.grid = next; Editor.history = [];
+      Editor.grid=next; Editor.history=[];
       Editor._buildBoard(); Editor._syncFooter(); Editor._syncMode();
     };
     document.getElementById('btn-apply-size').addEventListener('click', applySize);
-    si.addEventListener('keydown', e => { if (e.key === 'Enter') applySize(); });
-    document.getElementById('btn-size-dec').addEventListener('click', () => { si.value = Math.max(2, parseInt(si.value,10)-1); applySize(); });
-    document.getElementById('btn-size-inc').addEventListener('click', () => { si.value = Math.min(32, parseInt(si.value,10)+1); applySize(); });
+    si.addEventListener('keydown', e => { if (e.key==='Enter') applySize(); });
+    document.getElementById('btn-size-dec').addEventListener('click', () => { si.value=Math.max(2,parseInt(si.value,10)-1); applySize(); });
+    document.getElementById('btn-size-inc').addEventListener('click', () => { si.value=Math.min(32,parseInt(si.value,10)+1); applySize(); });
 
-    document.getElementById('btn-undo').addEventListener('click',  () => Editor.undo());
-    document.getElementById('btn-clear').addEventListener('click', () => {
-      if (!confirm('Clear the board?')) return;
-      Editor.clear();
-    });
-    document.getElementById('btn-save').addEventListener('click',  () => App._save());
-
-    document.getElementById('btn-copy-image').addEventListener('click', () => {
-      const svg  = document.getElementById('board-svg');
-      const xml  = new XMLSerializer().serializeToString(svg);
-      const blob = new Blob([xml], { type: 'image/svg+xml' });
-      const url  = URL.createObjectURL(blob);
-      const img  = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scale  = 2;
-        canvas.width  = (svg.width.baseVal.value  || img.naturalWidth)  * scale;
-        canvas.height = (svg.height.baseVal.value || img.naturalHeight) * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.scale(scale, scale);
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-        canvas.toBlob(b => {
-          navigator.clipboard.write([new ClipboardItem({ 'image/png': b })])
-            .then(() => App._toast('image copied'))
-            .catch(() => App._toast('not supported in this browser'));
-        });
-      };
-      img.src = url;
-    });
-
-    document.getElementById('btn-copy-board').addEventListener('click', () => {
-      const enc = URLCodec.encodeFull(Editor.grid, Editor.labels);
-      navigator.clipboard?.writeText(`${location.origin}${location.pathname}#${enc}`).then(() => App._toast('link copied'));
-    });
-
-    document.getElementById('note-toggle-btn').addEventListener('click', () => {
-      Editor.noteOpen = !Editor.noteOpen; Editor._syncPanels(); Editor._buildBoard();
-    });
-    document.getElementById('note-text').addEventListener('input',  e => { Editor.note  = e.target.value; Editor._setDirty(true); });
-    document.getElementById('title-text').addEventListener('input', e => { Editor.title = e.target.value; Editor._setDirty(true); });
-
-    document.getElementById('notation-toggle-btn').addEventListener('click', () => {
-      Editor.notationOpen = !Editor.notationOpen; Editor._syncPanels(); Editor._buildBoard();
-    });
-
+    // Editor controls
+    document.getElementById('btn-clear').addEventListener('click',  () => { if (!confirm('Clear the board?')) return; Editor.clear(); });
+    document.getElementById('btn-save').addEventListener('click',   () => App._save());
     document.getElementById('btn-rotate-ccw')?.addEventListener('click', () => Editor.rotate(-1));
     document.getElementById('btn-rotate-cw')?.addEventListener('click',  () => Editor.rotate(1));
     document.getElementById('btn-mirror')?.addEventListener('click',     () => Editor.mirror());
 
-    document.getElementById('nf-load-bke')?.addEventListener('click',   () => App._importSingle(Notation.fromBKE(document.getElementById('nf-bke').value)));
-    document.getElementById('nf-load-htn')?.addEventListener('click',   () => App._importSingle(Notation.fromHTN(document.getElementById('nf-htn').value)));
-    document.getElementById('nf-load-axial')?.addEventListener('click', () => App._importSingle(Notation.fromAxial(document.getElementById('nf-axial').value)));
-
-    document.getElementById('nf-copy-bke').addEventListener('click',   () => App._copy(document.getElementById('nf-bke').value));
-    document.getElementById('nf-copy-htn').addEventListener('click',   () => App._copy(document.getElementById('nf-htn').value));
-    document.getElementById('nf-copy-axial').addEventListener('click', () => App._copy(document.getElementById('nf-axial').value));
-
+    // Place mode
     const modes = { 'btn-mode-x':'x', 'btn-mode-o':'o', 'btn-mode-auto':'auto' };
-    for (const [id, mode] of Object.entries(modes)) {
+    for (const [id, mode] of Object.entries(modes))
       document.getElementById(id).addEventListener('click', () => {
         Editor.placeMode = mode;
-        for (const bid of Object.keys(modes)) document.getElementById(bid).classList.toggle('active', bid === id);
+        for (const bid of Object.keys(modes)) document.getElementById(bid).classList.toggle('active', bid===id);
       });
+
+    // Label mode
+    document.getElementById('btn-label-mode').addEventListener('click', () => {
+      Editor.labelMode = Editor.labelMode==='letter' ? 'number' : 'letter';
+      const btn = document.getElementById('btn-label-mode');
+      btn.textContent = Editor.labelMode==='letter' ? 'a' : '1';
+      btn.classList.toggle('active', Editor.labelMode==='number');
+    });
+
+    // Copy image / board link
+    document.getElementById('btn-copy-image').addEventListener('click', () => {
+      const svg=document.getElementById('board-svg');
+      const xml=new XMLSerializer().serializeToString(svg);
+      const url=URL.createObjectURL(new Blob([xml],{type:'image/svg+xml'}));
+      const img=new Image();
+      img.onload=()=>{
+        const scale=2, canvas=document.createElement('canvas');
+        canvas.width=(svg.width.baseVal.value||img.naturalWidth)*scale;
+        canvas.height=(svg.height.baseVal.value||img.naturalHeight)*scale;
+        const ctx=canvas.getContext('2d'); ctx.scale(scale,scale); ctx.drawImage(img,0,0);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(b=>navigator.clipboard.write([new ClipboardItem({'image/png':b})])
+          .then(()=>App._toast('image copied')).catch(()=>App._toast('not supported')));
+      };
+      img.src=url;
+    });
+    document.getElementById('btn-copy-board').addEventListener('click', () => {
+      const enc=URLCodec.encodeFull(Editor.grid,Editor.labels);
+      navigator.clipboard?.writeText(`${location.origin}${location.pathname}#${enc}`).then(()=>App._toast('link copied'));
+    });
+
+    // Export buttons — tab-contextual, each exports only its own content
+    document.getElementById('btn-share-editor')?.addEventListener('click', () => {
+      Share.showModal(
+        'editor',
+        () => JSON.stringify({ type:'hexoboards-board', board: URLCodec.encode(Editor.grid),
+          labels: Editor.labels.map(l=>[l.q,l.r,l.mark]), title: Editor.title, note: Editor.note }, null, 2),
+        'Editor Board',
+        App._toast,
+        (tab, data) => App._loadImportedData(tab, data)
+      );
+    });
+    document.getElementById('btn-share-match')?.addEventListener('click', () => {
+      Share.showModal(
+        'match',
+        () => JSON.stringify({ type:'hexoboards-match', tree: Match._serialize(Match.tree) }, null, 2),
+        'Match History',
+        App._toast,
+        (tab, data) => App._loadImportedData(tab, data)
+      );
+    });
+
+    // Note / notation panels
+    document.getElementById('note-toggle-btn').addEventListener('click', () => { Editor.noteOpen=!Editor.noteOpen; Editor._syncPanels(); Editor._buildBoard(); });
+    document.getElementById('notation-toggle-btn').addEventListener('click', () => { Editor.notationOpen=!Editor.notationOpen; Editor._syncPanels(); Editor._buildBoard(); });
+    document.getElementById('note-text').addEventListener('input',  e => { Editor.note=e.target.value;  Editor._setDirty(true); });
+    document.getElementById('title-text').addEventListener('input', e => { Editor.title=e.target.value; Editor._setDirty(true); });
+
+    // Notation panel load/copy (driven by Notation.FORMATS)
+    for (const [id] of Object.entries(Notation.FORMATS)) {
+      document.getElementById(`nf-load-${id}`)?.addEventListener('click', async () => {
+        const text = document.getElementById(`nf-${id}`)?.value || '';
+        App._importSingle(await Notation.loadFromSource(Source.fromString(text, id)));
+      });
+      document.getElementById(`nf-copy-${id}`)?.addEventListener('click', () =>
+        App._copy(document.getElementById(`nf-${id}`)?.value || ''));
     }
 
-    document.getElementById('btn-label-mode').addEventListener('click', () => {
-      Editor.labelMode = Editor.labelMode === 'letter' ? 'number' : 'letter';
-      const btn = document.getElementById('btn-label-mode');
-      btn.textContent = Editor.labelMode === 'letter' ? 'a' : '1';
-      btn.classList.toggle('active', Editor.labelMode === 'number');
+    // Match toolbar — snapshot current board to editor
+    document.getElementById('btn-match-snapshot').addEventListener('click', () => {
+      const grid = Match.currentBoardAsGrid();
+      Editor.loadGrid(grid);
+      UI.showEditor(() => Editor._buildBoard());
+      App._toast('board → editor');
     });
 
-    for (const id of ['tab-editor','tab-editor-b','tab-editor-d','tab-editor-c','tab-editor-a'])
-      document.getElementById(id).addEventListener('click', () => UI.showEditor(() => Editor._buildBoard()));
-    for (const id of ['tab-analyze','tab-analyze-b','tab-analyze-d','tab-analyze-c','tab-analyze-a'])
-      document.getElementById(id).addEventListener('click', () => UI.showAnalyze(() => Analyzer._buildBoard()));
-    for (const id of ['tab-browser','tab-browser-b','tab-browser-d','tab-browser-c','tab-browser-a'])
-      document.getElementById(id).addEventListener('click', () => UI.showBrowser(() => Browser.render(Browser.activeLibId || Store.LOCAL)));
-    for (const id of ['tab-data','tab-data-b','tab-data-d','tab-data-c','tab-data-a'])
-      document.getElementById(id).addEventListener('click', () => UI.showData(() => LibManager.render()));
-    for (const id of ['tab-convert','tab-convert-b','tab-convert-d','tab-convert-c','tab-convert-a'])
-      document.getElementById(id).addEventListener('click', () => UI.showConvert(() => {}));
-
-    document.getElementById('btn-lib-add').addEventListener('click', async () => {
-      const name = document.getElementById('lib-add-name').value.trim();
-      const url  = document.getElementById('lib-add-url').value.trim();
-      if (!name || !url) { App._toast('name and URL required'); return; }
-      const id = Store.addLibrary(name, url);
-      document.getElementById('lib-add-name').value = document.getElementById('lib-add-url').value = '';
-      App._toast('loading…');
-      await Store.fetchLibrary(id); LibManager.render(); App._toast('library added');
-    });
-    document.getElementById('lib-add-url').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btn-lib-add').click(); });
-
+    // Convert tab
     document.getElementById('btn-convert').addEventListener('click', () => {
-      const fromFmt = document.getElementById('conv-from').value;
-      const toFmt   = document.getElementById('conv-to').value;
-      const batch   = document.getElementById('conv-batch').checked;
-      const input   = document.getElementById('conv-input').value.trim();
-      const entries = batch ? Notation.parseMulti(input) : [input];
-      const results = Notation.convertBatch(entries, fromFmt, toFmt);
-      document.getElementById('conv-output').value = batch ? JSON.stringify(results, null, 2) : (results[0] || '(parse error)');
+      const fromFmt=document.getElementById('conv-from').value, toFmt=document.getElementById('conv-to').value;
+      const batch=document.getElementById('conv-batch').checked, input=document.getElementById('conv-input').value.trim();
+      const entries=batch?Notation.parseMulti(input):[input], results=Notation.convertBatch(entries,fromFmt,toFmt);
+      document.getElementById('conv-output').value=batch?JSON.stringify(results,null,2):(results[0]||'(parse error)');
     });
-    document.getElementById('btn-conv-copy').addEventListener('click',        () => App._copy(document.getElementById('conv-output').value));
-    document.getElementById('btn-conv-load').addEventListener('click',        () => { const fmt = document.getElementById('conv-to').value; App._importSingle(Notation.gridFromFmt(document.getElementById('conv-output').value.trim(), fmt)); });
-    document.getElementById('btn-conv-from-editor').addEventListener('click', () => { const fmt = document.getElementById('conv-from').value; document.getElementById('conv-input').value = Notation.gridToFmt(Editor.grid, fmt); });
+    document.getElementById('btn-conv-copy').addEventListener('click', () => App._copy(document.getElementById('conv-output').value));
+    document.getElementById('btn-conv-load').addEventListener('click', () => {
+      App._importSingle(Notation.gridFromFmt(document.getElementById('conv-output').value.trim(), document.getElementById('conv-to').value));
+    });
+    document.getElementById('btn-conv-from-editor').addEventListener('click', () => {
+      document.getElementById('conv-input').value=Notation.gridToFmt(Editor.grid, document.getElementById('conv-from').value);
+    });
 
-    document.getElementById('btn-search-clear')?.addEventListener('click', () => {
-      const s = document.getElementById('browser-search'); if (s) { s.value = ''; Browser._applySearch(''); s.focus(); }
+    // Library management
+    document.getElementById('btn-lib-add').addEventListener('click', async () => {
+      const name=document.getElementById('lib-add-name').value.trim(), url=document.getElementById('lib-add-url').value.trim();
+      if (!name||!url) { App._toast('name and URL required'); return; }
+      const id=Store.addLibrary(name,url);
+      document.getElementById('lib-add-name').value=document.getElementById('lib-add-url').value='';
+      App._toast('loading…'); await Store.fetchLibrary(id); LibManager.render(); App._toast('library added');
     });
+    document.getElementById('lib-add-url').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('btn-lib-add').click(); });
+
+    // Browser toolbar
+    document.getElementById('btn-search-clear')?.addEventListener('click', () => { const s=document.getElementById('browser-search'); if(s){s.value='';Browser._applySearch('');s.focus();} });
     document.getElementById('browser-search')?.addEventListener('input', e => Browser._applySearch(e.target.value));
-
-    document.getElementById('btn-collapse-all')?.addEventListener('click',  () => Browser.setAllCollapsed(true));
-    document.getElementById('btn-expand-all')?.addEventListener('click',    () => Browser.setAllCollapsed(false));
-    document.getElementById('btn-compact')?.addEventListener('click',       () => App._toggleCompact());
-    document.getElementById('btn-back-to-top')?.addEventListener('click',   () => { document.getElementById('browser-main').scrollTo({ top: 0, behavior: 'smooth' }); });
+    document.getElementById('btn-collapse-all')?.addEventListener('click', () => Browser.setAllCollapsed(true));
+    document.getElementById('btn-expand-all')?.addEventListener('click',   () => Browser.setAllCollapsed(false));
+    document.getElementById('btn-compact')?.addEventListener('click',      () => App._toggleCompact());
+    document.getElementById('btn-back-to-top')?.addEventListener('click',  () => document.getElementById('browser-main').scrollTo({top:0,behavior:'smooth'}));
+    document.getElementById('browser-main')?.addEventListener('scroll', e => { const btn=document.getElementById('btn-back-to-top'); if(btn) btn.hidden=e.target.scrollTop<300; });
 
     document.querySelectorAll('.btn-theme').forEach(b => b.addEventListener('click', () => App._toast('dark only')));
 
-    document.getElementById('browser-main')?.addEventListener('scroll', e => {
-      const btn = document.getElementById('btn-back-to-top');
-      if (btn) btn.hidden = e.target.scrollTop < 300;
-    });
-
+    // Keyboard shortcuts
     document.addEventListener('keydown', e => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); App._save(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { 
-        e.preventDefault(); 
-        if (UI.activeView === 'analyze') Analyzer.undo();
-        else Editor.undo(); 
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      if ((e.ctrlKey||e.metaKey)&&e.key==='s') { e.preventDefault(); App._save(); }
+      if ((e.ctrlKey||e.metaKey)&&e.key==='z') { e.preventDefault(); if(UI.activeView==='match') Match.undo(); else Editor.undo(); }
+      if ((e.ctrlKey||e.metaKey)&&e.key==='f') {
         e.preventDefault();
-        if (UI.activeView !== 'browser') UI.showBrowser(() => Browser.render(Browser.activeLibId || Store.LOCAL));
-        setTimeout(() => { const s = document.getElementById('browser-search'); s?.focus(); s?.select(); }, 50);
+        if (UI.activeView!=='browser') UI.showBrowser(()=>Browser.render(Browser.activeLibId||Store.LOCAL));
+        setTimeout(()=>{ const s=document.getElementById('browser-search'); s?.focus(); s?.select(); },50);
       }
     });
 
     window.addEventListener('hashchange', () => {
-      const h = window.location.hash.slice(1);
-      if (!h || (!h.startsWith('b/') && h !== 'd' && h !== 'c' && h !== 'a')) {
-        const d = URLCodec.decodeFull(h); if (!d) return;
-        Editor.grid = d.grid; Editor.labels = d.labels; Editor.history = []; Editor.nodeId = null;
-        document.getElementById('input-size').value = d.grid.s;
-        Editor.noteOpen = d.labels.length > 0;
-        Editor._syncPanels(); Editor._buildBoard(); Editor._syncFooter(); Editor._syncMode();
-      }
+      const h=window.location.hash.slice(1);
+      if (!h||h.startsWith('b/')||h==='d'||h==='c'||h==='m'||h==='a'||h.startsWith('remote/')) return;
+      const d=URLCodec.decodeFull(h); if(!d) return;
+      Editor.grid=d.grid; Editor.labels=d.labels; Editor.history=[]; Editor.nodeId=null;
+      document.getElementById('input-size').value=d.grid.s;
+      Editor.noteOpen=d.labels.length>0;
+      Editor._syncPanels(); Editor._buildBoard(); Editor._syncFooter(); Editor._syncMode();
     });
   },
 
+  // ── resize handles ────────────────────────────────────────────────────────
+
   _bindResizeHandles() {
-    App._makeResizable(document.getElementById('note-resize'), e => { Editor._applyPanelResize('note', window.innerWidth - e.clientX); });
-    App._makeResizable(document.getElementById('notation-resize'), e => { Editor._applyPanelResize('notation', window.innerWidth - (Editor.noteOpen ? Layout.NOTE_W : 0) - e.clientX); });
+    App._makeResizable(document.getElementById('note-resize'),
+      e => Editor._applyPanelResize('note', window.innerWidth - e.clientX));
+    App._makeResizable(document.getElementById('notation-resize'),
+      e => Editor._applyPanelResize('notation', window.innerWidth - (Editor.noteOpen?Layout.NOTE_W:0) - e.clientX));
     App._makeResizable(document.getElementById('sidebar-resize'), e => {
       const w = Math.max(120, Math.min(360, e.clientX));
-      document.getElementById('lib-sidebar').style.width  = w + 'px';
-      document.getElementById('browser-main').style.left  = w + 'px';
-      document.getElementById('browser-toolbar')?.style && (document.getElementById('browser-toolbar').style.left = w + 'px');
-      document.documentElement.style.setProperty('--lib-side-w', w + 'px');
+      document.getElementById('lib-sidebar').style.width = w+'px';
+      document.getElementById('browser-main').style.left = w+'px';
+      const tb=document.getElementById('browser-toolbar'); if(tb) tb.style.left=w+'px';
+      document.documentElement.style.setProperty('--lib-side-w', w+'px');
     });
   },
 
@@ -311,58 +408,31 @@ const App = {
     if (!handle) return;
     handle.addEventListener('mousedown', e => {
       e.preventDefault();
-      const up = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', up); };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', up);
+      const up=()=>{ document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',up); };
+      document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',up);
     });
   },
+
+  // ── tooltips ─────────────────────────────────────────────────────────────
 
   _initTooltips() {
-    const tip = document.getElementById('tooltip');
-    const show = target => {
-      tip.textContent = target.dataset.tip;
-      tip.hidden = false;
-      const r   = target.getBoundingClientRect();
-      const below = r.top < 80;
-      tip.style.top  = below ? (r.bottom + 6) + 'px' : (r.top - tip.offsetHeight - 6) + 'px';
-      tip.style.left = Math.max(4, Math.min(r.left + r.width / 2 - tip.offsetWidth / 2, window.innerWidth - tip.offsetWidth - 4)) + 'px';
-    };
-    document.addEventListener('mouseover', e => {
-      const t = e.target.closest('[data-tip]');
-      if (t) show(t); else tip.hidden = true;
-    });
-    document.addEventListener('mouseout', e => {
-      if (!e.relatedTarget?.closest('[data-tip]')) tip.hidden = true;
-    });
+    const tip=document.getElementById('tooltip');
+    const show=t=>{ tip.textContent=t.dataset.tip; tip.hidden=false; const r=t.getBoundingClientRect(), below=r.top<80; tip.style.top=(below?(r.bottom+6):(r.top-tip.offsetHeight-6))+'px'; tip.style.left=Math.max(4,Math.min(r.left+r.width/2-tip.offsetWidth/2,window.innerWidth-tip.offsetWidth-4))+'px'; };
+    document.addEventListener('mouseover', e=>{ const t=e.target.closest('[data-tip]'); if(t) show(t); else tip.hidden=true; });
+    document.addEventListener('mouseout',  e=>{ if(!e.relatedTarget?.closest('[data-tip]')) tip.hidden=true; });
   },
 
-  _initTheme() {
-    document.documentElement.classList.remove('light');
-    document.querySelectorAll('.btn-theme').forEach(b => b.textContent = '☾');
-  },
+  // ── compact / theme ───────────────────────────────────────────────────────
 
-  _initCompact() {
-    const compact = localStorage.getItem('hexstrat-compact') === '1';
-    document.getElementById('browser-main')?.classList.toggle('browser-compact', compact);
-    document.getElementById('btn-compact')?.classList.toggle('active', compact);
-  },
+  _initTheme()   { document.documentElement.classList.remove('light'); document.querySelectorAll('.btn-theme').forEach(b=>b.textContent='☾'); },
+  _initCompact() { const c=localStorage.getItem(Store._K.compact)==='1'; document.getElementById('browser-main')?.classList.toggle('browser-compact',c); document.getElementById('btn-compact')?.classList.toggle('active',c); },
+  _toggleCompact() { const m=document.getElementById('browser-main'), a=m.classList.toggle('browser-compact'); localStorage.setItem(Store._K.compact,a?'1':''); document.getElementById('btn-compact').classList.toggle('active',a); },
 
-  _toggleCompact() {
-    const main   = document.getElementById('browser-main');
-    const active = main.classList.toggle('browser-compact');
-    localStorage.setItem('hexstrat-compact', active ? '1' : '');
-    document.getElementById('btn-compact').classList.toggle('active', active);
-  },
+  // ── helpers ───────────────────────────────────────────────────────────────
 
-  _copy(text) {
-    if (!text) { App._toast('nothing to copy'); return; }
-    navigator.clipboard?.writeText(text).then(() => App._toast('copied'));
-  },
+  _copy(text) { if(!text){App._toast('nothing to copy');return;} navigator.clipboard?.writeText(text).then(()=>App._toast('copied')); },
 
-  _toast(msg) {
-    const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 1800);
-  },
+  _toast(msg) { const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1800); },
 };
 
 export { App };

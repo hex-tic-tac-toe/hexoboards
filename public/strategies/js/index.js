@@ -1,3 +1,2 @@
-import { App } from '/strategies/js/modules/App.js';
-
+import { App } from './modules/App.js';
 App.init();
