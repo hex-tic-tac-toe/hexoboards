@@ -642,7 +642,7 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
   background: var(--border);
 }
 .eval-bar-x { background: #e8e8e8; transition: width .4s; }
-.eval-bar-o { background: #4488cc; transition: width .4s; }
+.eval-bar-o { background: #555555; transition: width .4s; }
 .eval-label {
   font-size: 9px; color: var(--dim); text-align: center;
   margin-top: 3px; letter-spacing: .06em;
