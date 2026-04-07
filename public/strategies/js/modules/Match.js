@@ -42,6 +42,8 @@ const MatchNode = {
       grid:     opts.grid     || { cells: new Map() },
       lastMove: opts.lastMove || null,
       label:    opts.label    || null,  // { type, icon, text } or null
+      isWin:    opts.isWin    || false, // true when this move completed a 6-in-a-row
+      winRun:   opts.winRun   || null,  // Set<"q,r"> of the winning cells
       children: [],
     };
   },
@@ -95,8 +97,7 @@ const Match = {
   treeOpen: true,
 
   // Win state
-  winCells: null,     // Set<"q,r"> of the winning run, or null
-  _winNodeId: null,   // id of the node that completed the win
+  winCells: null,     // Set<"q,r"> currently highlighted on the board (mirrors currentNode.winRun)
 
   // Whether board is active (gated by start modal)
   _boardActive: false,
@@ -142,6 +143,7 @@ const Match = {
       const idx = arr.indexOf(Match.currentNode);
       if (idx > 0) Match.currentNode = arr[idx - 1];
     }
+    Match.winCells = Match.currentNode.isWin ? Match.currentNode.winRun : null;
     Match._renderTree(); Match._buildBoard();
   },
 
@@ -153,7 +155,6 @@ const Match = {
     Match.viewOffset   = { x: 0, y: 0 };
     Match.viewZoom     = 1;
     Match.winCells     = null;
-    Match._winNodeId   = null;
     Match._boardActive = false;
     Match.title        = '';
     Match.note         = '';
@@ -325,13 +326,15 @@ const Match = {
     Match.currentNode.children.push(newNode);
     Match.currentNode = newNode;
 
-    // Win detection
+    // Win detection — only fires for the exact move that completes 6-in-a-row
     const win = WinDetector.check(q, r, state, newCells);
     if (win) {
-      Match.winCells   = new Set(win.map(c => HexGrid.key(c.q, c.r)));
-      Match._winNodeId = newNode.id;
+      const winSet = new Set(win.map(c => HexGrid.key(c.q, c.r)));
+      newNode.isWin  = true;
+      newNode.winRun = winSet;   // stored on the node permanently
+      Match.winCells = winSet;   // for board highlight right now
       Match._save(); Match._renderTree(); Match._buildBoard();
-      Match._showWinPopup(state, win);
+      Match._showWinPopup(state, win.length);
       return false; // signal: stop placing
     }
     Match.winCells = null;
@@ -415,10 +418,8 @@ const Match = {
 
   _goTo(node) {
     Match.currentNode = node;
-    // Clear win highlight when navigating away from the winning move
-    if (Match.winCells && node.id !== Match._winNodeId) {
-      Match.winCells = null;
-    }
+    // Always sync winCells from the node being navigated to
+    Match.winCells = node.isWin ? node.winRun : null;
     Match._renderTree(); Match._buildBoard();
   },
 
@@ -474,9 +475,8 @@ const Match = {
 
       // ── main row (original flat layout) ────────────────────────────────
       const line = document.createElement('div');
-      const isWin = node.id === Match._winNodeId;
       line.className = ['tree-node', isCurrent&&'current', isFork&&'fork',
-        isChildOfFork&&'child-of-fork', isWin&&'win-node']
+        isChildOfFork&&'child-of-fork', node.isWin&&'win-node']
         .filter(Boolean).join(' ');
       line.dataset.nodeId = node.id;
       if (isChildOfFork) line.title = 'Double-click to collapse / expand';
@@ -616,7 +616,6 @@ const Match = {
       Match.viewOffset  = { x: 0, y: 0 };
       Match.viewZoom    = 1;
       Match.winCells    = null;
-      Match._winNodeId  = null;
       Match._boardActive = true;
       Match.title        = '';
       Match.note         = '';
@@ -668,39 +667,56 @@ const Match = {
 
   // ── win popup ─────────────────────────────────────────────────────────────
 
-  _showWinPopup(state, winCells) {
+  /** Show win popup. `runLength` is the integer length of the winning run. */
+  _showWinPopup(state, runLength) {
+    document.getElementById('match-win-popup-backdrop')?.remove();
     document.getElementById('match-win-popup')?.remove();
 
     const playerName = state === 1 ? 'X' : 'O';
-    const popup      = Object.assign(document.createElement('div'),
-      { id: 'match-win-popup', className: 'win-popup' });
 
-    // Count stones
+    // Count stones at the winning position
     let xCount = 0, oCount = 0;
     for (const c of Match.currentNode.grid.cells.values()) {
       if (c.state === 1) xCount++; else if (c.state === 2) oCount++;
     }
+    const totalMoves = Match._getTurn();
+
+    const backdrop = Object.assign(document.createElement('div'), {
+      id: 'match-win-popup-backdrop', className: 'win-popup-backdrop',
+    });
+    const popup = Object.assign(document.createElement('div'),
+      { id: 'match-win-popup', className: 'win-popup' });
 
     popup.innerHTML = `
       <div class="win-popup-player">${playerName} wins!</div>
       <div class="win-popup-stats">
-        <span>X stones: ${xCount}</span><span>O stones: ${oCount}</span>
-        <span>Moves: ${Match._getTurn()}</span>
-        <span>Run: ${winCells.length} in a row</span>
+        <span>X  ${xCount}</span><span>O  ${oCount}</span>
+        <span>${totalMoves} moves</span>
+        <span>${runLength}-in-a-row</span>
       </div>
       <div class="win-popup-actions"></div>`;
+
+    const close = () => { backdrop.remove(); popup.remove(); };
 
     const acts = popup.querySelector('.win-popup-actions');
     const btn  = (lbl, fn) => {
       const b = document.createElement('button'); b.className = 'btn'; b.textContent = lbl;
       b.addEventListener('click', fn); acts.appendChild(b);
     };
-    btn('continue playing', () => popup.remove());
-    btn('new game', () => { popup.remove(); Match.clear(); });
+    btn('continue', () => {
+      close();
+      // Restore turn indicator (might still say "thinking…" from bot)
+      const turnEl = document.getElementById('match-turn');
+      if (turnEl) turnEl.textContent = "X's turn";  // match continues; X always plays next (new branch)
+    });
+    btn('new game', () => { close(); Match.clear(); });
 
-    // Dismiss on click outside
-    popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
-    document.body.appendChild(popup);
+    backdrop.addEventListener('click', close);
+    document.addEventListener('keydown', function esc(e) {
+      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+    });
+
+    document.body.append(backdrop, popup);
   },
 
   // ── play panel ────────────────────────────────────────────────────────────
@@ -906,12 +922,17 @@ const Match = {
 
   _serialize(node) {
     return { id:node.id, turn:node.turn, lastMove:node.lastMove, label:node.label,
+      isWin: node.isWin || false,
+      winRun: node.winRun ? Array.from(node.winRun) : null,
       grid:{cells:Array.from(node.grid.cells.entries())},
       children:node.children.map(c=>Match._serialize(c)) };
   },
 
   _deserialize(data) {
-    const node = MatchNode.create({id:data.id,turn:data.turn,lastMove:data.lastMove,label:data.label});
+    const node = MatchNode.create({id:data.id,turn:data.turn,lastMove:data.lastMove,label:data.label,
+      isWin:  data.isWin  || false,
+      winRun: data.winRun ? new Set(data.winRun) : null,
+    });
     node.grid.cells = new Map(data.grid.cells);
     node.children   = data.children.map(c=>{const ch=Match._deserialize(c); ch.parent=node; return ch;});
     return node;

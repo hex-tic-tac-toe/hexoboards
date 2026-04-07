@@ -573,27 +573,37 @@ input:focus, textarea:focus { outline:none; border-color:var(--accent-dim); }
 .start-paste-input:focus { outline: none; border-color: var(--accent-dim); }
 
 /* ── Win popup ───────────────────────────────────────────────────────────── */
+.win-popup-backdrop {
+  position: fixed; inset: 0; z-index: 8290;
+  background: rgba(0,0,0,.45);
+}
 .win-popup {
   position: fixed; z-index: 8300;
   top: 50%; left: 50%; transform: translate(-50%,-50%);
   background: var(--surface); border: 1px solid var(--border-hi);
-  width: min(320px, 90vw); box-shadow: 0 8px 40px rgba(0,0,0,.8);
-  padding: 20px 20px 14px; display: flex; flex-direction: column; gap: 12px;
+  width: min(280px, 90vw); box-shadow: 0 8px 40px rgba(0,0,0,.9);
+  padding: 22px 20px 16px; display: flex; flex-direction: column; gap: 14px;
   text-align: center;
 }
 .win-popup-player {
-  font-size: 22px; font-weight: bold; letter-spacing: .1em; color: var(--accent);
+  font-size: 24px; font-weight: bold; letter-spacing: .1em; color: var(--accent);
 }
 .win-popup-stats {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
-  font-size: 11px; color: var(--muted); text-align: left; padding: 0 4px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  font-size: 11px; color: var(--muted); padding: 0 4px;
 }
-.win-popup-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.win-popup-stats span {
+  background: rgba(255,255,255,.03); padding: 4px 8px;
+  border: 1px solid var(--border); text-align: center;
+}
+.win-popup-actions { display: flex; gap: 8px; justify-content: center; }
 
 /* ── Win highlight ring (gold) ───────────────────────────────────────────── */
 :root { --win-ring: #e8c840; }
-.tree-node.win-node { border-color: #e8c840; color: #e8c840; }
-.tree-node.win-node .tree-node-content { color: #e8c840; }
+.tree-node.win-node { border-color: #e8c840 !important; }
+.tree-node.win-node .tree-node-content { color: #e8c840; font-weight: bold; }
+.tree-node.win-node .tree-node-coords  { color: #b89830; }
+.tree-node-wrapper:has(.win-node) .tree-node-label { border-color: #e8c840; }
 
 /* ── Play panel ──────────────────────────────────────────────────────────── */
 .match-play-panel {
