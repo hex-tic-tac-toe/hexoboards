@@ -82,12 +82,16 @@ const App = {
 
     // Resolve startup hash
     const hash = window.location.hash.slice(1);
+    let _shareTab = null;
 
     Match._load();
     Match.init();
+
     const shareMatch = location.pathname.match(/^\/share\/(editor|match|library)\/([A-Za-z0-9_-]+)\/?$/);
     if (shareMatch) {
-      const tab = shareMatch[1];
+      _shareTab = shareMatch[1];
+      localStorage.removeItem(Store._K.editor);
+      const tab = _shareTab;
       const id = shareMatch[2];
       App._toast('loading…');
       try {
@@ -130,15 +134,16 @@ const App = {
     App._initTooltips();
     App._initCompact();
 
-    Match._load();
-    Match.init();
-
     await Store.fetchDefaults();
     await Store.fetchAllActive();
     Browser._renderNav();
 
     // Route to view
-    if (hash.startsWith('b/')) {
+    if (_shareTab) {
+      if (_shareTab === 'editor') UI.showEditor(() => Editor._buildBoard());
+      else if (_shareTab === 'match') UI.showMatch(() => { if (!Match._boardActive) Match._showStartModal(); Match._buildBoard(); });
+      else if (_shareTab === 'library') UI.showBrowser(() => Browser.render(Store.LOCAL));
+    } else if (hash.startsWith('b/')) {
       const parts = hash.slice(2).split('/');
       const libId = parts[0] || Store.LOCAL;
       const secId = parts[1] || null;
@@ -175,7 +180,18 @@ const App = {
       App._toast('library loaded');
     } else if (tab === 'editor' && (data.type === 'hexoboards-board' || data.board)) {
       const grid = URLCodec.decode(data.board);
-      if (grid) { Editor.loadGrid(grid); UI.showEditor(() => Editor._buildBoard()); App._toast('board loaded'); }
+      if (grid) {
+        Editor.loadGrid(grid);
+        if (data.labels) {
+          Editor.labels = data.labels.map(l => ({ q: l[0], r: l[1], mark: l[2] }));
+          Editor.noteOpen = Editor.labels.length > 0;
+        }
+        if (data.title) Editor.title = data.title;
+        if (data.note) Editor.note = data.note;
+        Editor._syncPanels();
+        UI.showEditor(() => Editor._buildBoard());
+        App._toast('board loaded');
+      }
     } else if (tab === 'match') {
       let loaded = false;
       // Compact format (hextic notation wrapped in JSON)
