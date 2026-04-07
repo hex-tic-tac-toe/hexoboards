@@ -115,16 +115,9 @@ const GameImport = {
     if (!moves || moves.length === 0) return '';
     const result = [];
     for (const move of moves) {
-      // Output [q,r] axial format
       result.push([move.q, move.r]);
     }
     return JSON.stringify(result);
-  },
-
-  _hexToNat(q, r) {
-    const x = q >= 0 ? 2 * q : -2 * q - 1;
-    const y = r >= 0 ? 2 * r : -2 * r - 1;
-    return (x * x + 3 * x + 2 * x * y + y + y * y) / 2;
   },
 
   parseGameUrl(input) {

@@ -613,7 +613,6 @@ const Match = {
     };
 
     body.appendChild(makeBtn('new game', () => {
-      // Reset without calling clear() to avoid re-triggering modal
       Match.tree            = MatchNode.create({ turn: 0 });
       Match.currentNode     = Match.tree;
       Match._lastBoardEmpty = true;
@@ -638,32 +637,15 @@ const Match = {
       }));
     }
 
-    const pasteRow = document.createElement('div'); pasteRow.className = 'start-paste-row';
-    const pasteIn  = document.createElement('input'); pasteIn.type = 'text';
-    pasteIn.className = 'start-paste-input'; pasteIn.placeholder = 'paste hextic notation…';
-    const pasteBtn = document.createElement('button'); pasteBtn.className = 'btn';
-    pasteBtn.textContent = 'load notation';
-    pasteBtn.addEventListener('click', () => {
-      if (!Match.fromHextic(pasteIn.value.trim())) return;
-      Match._boardActive = true;
+    const fromImportBtn = document.createElement('button');
+    fromImportBtn.className = 'btn start-modal-btn';
+    fromImportBtn.textContent = 'import game';
+    fromImportBtn.addEventListener('click', () => {
       backdrop.remove(); modal.remove();
+      document.getElementById('match-import-modal').hidden = false;
     });
-    pasteIn.addEventListener('keydown', e => { if (e.key === 'Enter') pasteBtn.click(); });
-    pasteRow.append(pasteIn, pasteBtn);
+    body.appendChild(fromImportBtn);
 
-    const fromClipBtn = document.createElement('button');
-    fromClipBtn.className = 'btn start-modal-btn';
-    fromClipBtn.textContent = 'load from clipboard';
-    fromClipBtn.addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (!Match.fromHextic(text.trim())) { pasteIn.value = text; pasteIn.focus(); return; }
-        Match._boardActive = true;
-        backdrop.remove(); modal.remove();
-      } catch { pasteIn.focus(); }
-    });
-
-    body.append(pasteRow, fromClipBtn);
     modal.appendChild(body);
     // Clicking backdrop = cancel (no state change)
     backdrop.addEventListener('click', () => { backdrop.remove(); modal.remove(); });
