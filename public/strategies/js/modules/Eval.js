@@ -8,10 +8,10 @@
  */
 
 const KRAKEN_URL = '/api/kraken';
-const KRAKEN_TIMEOUT_MS = 30000;
+const KRAKEN_TIMEOUT_MS = 60000;
 
-// Convert hexoboards cells to six-tac game_json format
-function _cellsToGameJson(cells) {
+// Convert hexoboards cells to six-tac turnsJson format
+function _cellsToTurnsJson(cells) {
   const turns = [];
   const stonesByTurn = new Map();
 
@@ -35,6 +35,21 @@ function _cellsToGameJson(cells) {
   return JSON.stringify({ turns });
 }
 
+// Poll job until complete
+async function _waitForJob(jobId) {
+  const maxAttempts = 60;
+  const interval = 500;
+  for (let i = 0; i < maxAttempts; i++) {
+    const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
+    if (!resp.ok) break;
+    const job = await resp.json();
+    if (job.status === 'done') return job.result;
+    if (job.status === 'failed') break;
+    await new Promise(r => setTimeout(r, interval));
+  }
+  return null;
+}
+
 const Eval = {
   /**
    * Evaluate a position.
@@ -43,28 +58,35 @@ const Eval = {
    * @returns {number} 0.0–1.0
    */
   async evaluate(cells /*, turn */) {
-    const gameJson = _cellsToGameJson(cells);
+    const turnsJson = _cellsToTurnsJson(cells);
 
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
-
-      const response = await fetch(`${KRAKEN_URL}/v1/eval`, {
+      // Create async job
+      const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/eval/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bot_name: 'kraken', game_json: gameJson }),
-        signal: controller.signal,
+        body: JSON.stringify({
+          position: { turnsJson },
+          config: { botName: 'kraken' }
+        }),
       });
 
-      clearTimeout(timeout);
-
-      if (!response.ok) {
+      if (!jobResponse.ok) {
         return 0.5;
       }
 
-      const data = await response.json();
-      if (typeof data.score === 'number' && data.score >= 0 && data.score <= 1) {
-        return data.score;
+      const job = await jobResponse.json();
+      if (!job.jobId) {
+        return 0.5;
+      }
+
+      // Wait for job completion
+      const result = await _waitForJob(job.jobId);
+      if (result && typeof result.score === 'number' && Number.isFinite(result.score)) {
+        // Kraken returns score where negative = X winning, positive = O winning
+        // Convert to 0-1 range: 0.5 + (score / 2) → 0 = X win, 0.5 = equal, 1 = O win
+        const normalized = 0.5 - (result.score / 2);
+        return Math.max(0, Math.min(1, normalized));
       }
     } catch (err) {
       // Fall back to mock on any error

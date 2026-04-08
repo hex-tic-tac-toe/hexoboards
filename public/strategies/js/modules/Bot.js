@@ -34,15 +34,14 @@ function _randomFrom(arr) {
   return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
 }
 
-// Convert hexoboards cells to six-tac game_json format
+// Convert hexoboards cells to six-tac turnsJson format
 // Format: {"turns":[{"stones":[[q,r],[q,r]]},...]}
-function _cellsToGameJson(cells) {
+function _cellsToTurnsJson(cells) {
   const turns = [];
   const stonesByTurn = new Map();
 
   for (const [, cell] of cells) {
     if (cell.state === 0) continue;
-    const player = cell.state === 1 ? 'One' : 'Two';
     const turn = cell.turn;
     if (!stonesByTurn.has(turn)) {
       stonesByTurn.set(turn, []);
@@ -59,6 +58,28 @@ function _cellsToGameJson(cells) {
   }
 
   return JSON.stringify({ turns });
+}
+
+// Convert cube {x,y,z} to axial {q,r}
+function _cubeToAxial(cube) {
+  const q = cube.x;
+  const r = cube.z;
+  return { q, r };
+}
+
+// Poll job until complete
+async function _waitForJob(jobId) {
+  const maxAttempts = 60;
+  const interval = 500;
+  for (let i = 0; i < maxAttempts; i++) {
+    const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
+    if (!resp.ok) break;
+    const job = await resp.json();
+    if (job.status === 'done') return job.result;
+    if (job.status === 'failed') break;
+    await new Promise(r => setTimeout(r, interval));
+  }
+  return null;
 }
 
 // ── registry ─────────────────────────────────────────────────────────────────
@@ -78,29 +99,33 @@ const BOT_REGISTRY = {
     name: 'Kraken',
     /** Neural MCTS bot via remote API. */
     async move(cells, turn) {
-      const gameJson = _cellsToGameJson(cells);
+      const turnsJson = _cellsToTurnsJson(cells);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
-
-        const response = await fetch(`${KRAKEN_URL}/v1/best-move`, {
+        // Create async job
+        const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bot_name: 'kraken', game_json: gameJson }),
-          signal: controller.signal,
+          body: JSON.stringify({
+            position: { turnsJson },
+            config: { botName: 'kraken' }
+          }),
         });
 
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-          console.error('Kraken API error:', response.status, response.statusText);
+        if (!jobResponse.ok) {
+          console.error('Kraken job error:', jobResponse.status);
           return _randomFrom(_legalMoves(cells));
         }
 
-        const data = await response.json();
-        if (data.stones && data.stones.length >= 2) {
-          const [first, second] = data.stones;
-          return { q: first[0], r: first[1] };
+        const job = await jobResponse.json();
+        if (!job.jobId) {
+          return _randomFrom(_legalMoves(cells));
+        }
+
+        // Wait for job completion
+        const result = await _waitForJob(job.jobId);
+        if (result && result.stones && result.stones.length >= 2) {
+          const first = result.stones[0];
+          return _cubeToAxial(first);
         }
       } catch (err) {
         console.error('Kraken move failed:', err.message);
