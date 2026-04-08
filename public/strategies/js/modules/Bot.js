@@ -108,8 +108,8 @@ const BOT_REGISTRY = {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
 
-        // Create async job
-        const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
+        // Use sync endpoint first, fallback to jobs if needed
+        const response = await fetch(`${KRAKEN_URL}/v1/compute/best-move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -121,32 +121,53 @@ const BOT_REGISTRY = {
 
         clearTimeout(timeout);
 
-        if (!jobResponse.ok) {
-          return _randomFrom(_legalMoves(cells));
+        if (!response.ok) {
+          // Try async job as fallback
+          return await _krakenMoveViaJob(cells, turnsJson);
         }
 
-        const job = await jobResponse.json();
-        if (!job.jobId) {
-          return _randomFrom(_legalMoves(cells));
-        }
-
-        // Wait for job completion (with timeout)
-        const waitController = new AbortController();
-        const waitTimeout = setTimeout(() => waitController.abort(), KRAKEN_TIMEOUT_MS);
-        const result = await _waitForJob(job.jobId, waitController);
-        clearTimeout(waitTimeout);
-
-        if (result && result.stones && result.stones.length >= 2) {
-          const first = result.stones[0];
+        const data = await response.json();
+        if (data.stones && data.stones.length >= 2) {
+          const first = data.stones[0];
           return _cubeToAxial(first);
         }
-      } catch (err) {
-        // Fall back to random on error
+      } catch {
+        // Fall back to job-based approach
       }
-      return _randomFrom(_legalMoves(cells));
+      // Return null to cancel move - user can retry or switch bot
+      return null;
     },
   },
 };
+
+// Use job-based approach as fallback
+async function _krakenMoveViaJob(cells, turnsJson) {
+  try {
+    const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        position: { turnsJson },
+        config: { botName: 'kraken' }
+      }),
+    });
+
+    if (!jobResponse.ok) return null;
+
+    const job = await jobResponse.json();
+    if (!job.jobId) return null;
+
+    const waitController = new AbortController();
+    const waitTimeout = setTimeout(() => waitController.abort(), 10000);
+    const result = await _waitForJob(job.jobId, waitController);
+    clearTimeout(waitTimeout);
+
+    if (result && result.stones && result.stones.length >= 2) {
+      return _cubeToAxial(result.stones[0]);
+    }
+  } catch { }
+  return null;
+}
 
 // ── public API ────────────────────────────────────────────────────────────────
 

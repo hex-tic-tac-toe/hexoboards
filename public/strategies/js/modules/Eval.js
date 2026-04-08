@@ -35,25 +35,6 @@ function _cellsToTurnsJson(cells) {
   return JSON.stringify({ turns });
 }
 
-// Poll job until complete
-async function _waitForJob(jobId, signal) {
-  const maxAttempts = 20;
-  const interval = 500;
-  for (let i = 0; i < maxAttempts; i++) {
-    if (signal?.aborted) return null;
-    try {
-      const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
-      if (!resp.ok) return null;
-      const job = await resp.json();
-      if (job.status === 'done' && job.result) return job.result;
-      if (job.status === 'failed' || job.status === 'done') return null;
-      if (job.status === 'running' && i >= 5) return null; // Give up after 2.5s if still running
-    } catch { return null; }
-    await new Promise(r => setTimeout(r, interval));
-  }
-  return null;
-}
-
 const Eval = {
   /**
    * Evaluate a position.
@@ -68,8 +49,8 @@ const Eval = {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
 
-      // Create async job
-      const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/eval/jobs`, {
+      // Try sync endpoint first
+      const response = await fetch(`${KRAKEN_URL}/v1/compute/eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -81,29 +62,17 @@ const Eval = {
 
       clearTimeout(timeout);
 
-      if (!jobResponse.ok) {
+      if (!response.ok) {
         return 0.5;
       }
 
-      const job = await jobResponse.json();
-      if (!job.jobId) {
-        return 0.5;
-      }
-
-      // Wait for job completion (with timeout)
-      const waitController = new AbortController();
-      const waitTimeout = setTimeout(() => waitController.abort(), 10000); // 10s max
-      const result = await _waitForJob(job.jobId, waitController);
-      clearTimeout(waitTimeout);
-
-      if (result && typeof result.score === 'number' && Number.isFinite(result.score)) {
-        // Kraken returns score where negative = X winning, positive = O winning
-        // Convert to 0-1 range: 0.5 - (score / 2) → 0 = X win, 0.5 = equal, 1 = O win
-        const normalized = 0.5 - (result.score / 2);
+      const data = await response.json();
+      if (typeof data.score === 'number' && Number.isFinite(data.score)) {
+        const normalized = 0.5 - (data.score / 2);
         return Math.max(0, Math.min(1, normalized));
       }
-    } catch (err) {
-      // Fall back to mock on any error
+    } catch {
+      // Fall back to mock
     }
 
     return 0.5;

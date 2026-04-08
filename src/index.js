@@ -398,9 +398,6 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/kraken/')) {
-      if (request.method !== 'POST') {
-        return methodNotAllowed(['POST']);
-      }
       const krakenPath = url.pathname.replace(/^\/api\/kraken/, '') || '/v1/best-move';
       return proxyKraken(krakenPath, url.search, request);
     }
