@@ -5,6 +5,7 @@ const SHARE_ID_ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ2345
 const SHARE_ID_LENGTH = 12;
 const MAX_SHARE_BYTES = 200_000;
 const HEXO_API_BASE = 'https://hexo.did.science';
+const KRAKEN_API_BASE = 'https://6-tac.com';
 
 function normalizeForwardedHost(value) {
   if (!value) {
@@ -323,6 +324,29 @@ async function proxyHexoGame(gameId) {
   }
 }
 
+async function proxyKraken(pathname, search, request) {
+  try {
+    const targetUrl = new URL(pathname, KRAKEN_API_BASE);
+    targetUrl.search = search;
+    const body = await request.text();
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'accept': 'application/json',
+      },
+      body,
+    });
+    const data = await response.json();
+    return jsonResponse(data, 200, {
+      'cache-control': 'no-store',
+      'access-control-allow-origin': '*',
+    });
+  } catch (e) {
+    return errorResponse(`kraken api error: ${e.message}`, 502);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = publicRequestUrl(request);
@@ -371,6 +395,14 @@ export default {
         return errorResponse('id parameter required');
       }
       return proxyHexoGame(gameId);
+    }
+
+    if (url.pathname.startsWith('/api/kraken/')) {
+      if (request.method !== 'POST') {
+        return methodNotAllowed(['POST']);
+      }
+      const krakenPath = url.pathname.replace(/^\/api\/kraken/, '') || '/v1/best-move';
+      return proxyKraken(krakenPath, url.search, request);
     }
 
     const share = parseSharePath(url.pathname);
