@@ -10,29 +10,15 @@
 const KRAKEN_URL = '/api/kraken';
 const KRAKEN_TIMEOUT_MS = 60000;
 
-// Convert hexoboards cells to six-tac turns object
-function _cellsToTurnsObject(cells) {
-  const turns = [];
-  const stonesByTurn = new Map();
-
-  for (const [, cell] of cells) {
-    if (cell.state === 0) continue;
-    const turn = cell.turn;
-    if (!stonesByTurn.has(turn)) {
-      stonesByTurn.set(turn, []);
-    }
-    stonesByTurn.get(turn).push([cell.q, cell.r]);
+// Convert hexoboards cells to six-tac stones format (flat array)
+function _cellsToStonesObject(cells) {
+  const stones = [];
+  const cellsArray = Array.from(cells.values()).filter(c => c.state !== 0);
+  cellsArray.sort((a, b) => a.turn - b.turn);
+  for (const cell of cellsArray) {
+    stones.push([cell.q, cell.r]);
   }
-
-  const sortedTurns = Array.from(stonesByTurn.keys()).sort((a, b) => a - b);
-  for (const turn of sortedTurns) {
-    const stones = stonesByTurn.get(turn);
-    if (stones.length >= 2) {
-      turns.push({ stones: [stones[0], stones[1]] });
-    }
-  }
-
-  return { turns };
+  return { stones };
 }
 
 const Eval = {
@@ -43,18 +29,18 @@ const Eval = {
    * @returns {number} 0.0–1.0
    */
   async evaluate(cells /*, turn */) {
-    const turnsObj = _cellsToTurnsObject(cells);
+    const stonesObj = _cellsToStonesObject(cells);
+    const stonesJson = JSON.stringify(stonesObj);
 
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
 
-      // Try sync endpoint first - send object directly
       const response = await fetch(`${KRAKEN_URL}/v1/compute/eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          position: { turnsJson: turnsObj },
+          position: { turnsJson: stonesJson },
           config: { botName: 'kraken' }
         }),
         signal: controller.signal,

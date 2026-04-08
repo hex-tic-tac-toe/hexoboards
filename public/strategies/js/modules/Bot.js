@@ -34,29 +34,21 @@ function _randomFrom(arr) {
   return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
 }
 
-// Convert hexoboards cells to six-tac turns object (NOT stringified)
-function _cellsToTurnsObject(cells) {
-  const turns = [];
-  const stonesByTurn = new Map();
+// Convert hexoboards cells to six-tac stones format
+// Format: {"stones":[[q,r],[q,r],...]}
+function _cellsToStonesObject(cells) {
+  const stones = [];
+  const turnOrder = [];
 
-  for (const [, cell] of cells) {
-    if (cell.state === 0) continue;
-    const turn = cell.turn;
-    if (!stonesByTurn.has(turn)) {
-      stonesByTurn.set(turn, []);
-    }
-    stonesByTurn.get(turn).push([cell.q, cell.r]);
+  // Get all stones sorted by turn
+  const cellsArray = Array.from(cells.values()).filter(c => c.state !== 0);
+  cellsArray.sort((a, b) => a.turn - b.turn);
+
+  for (const cell of cellsArray) {
+    stones.push([cell.q, cell.r]);
   }
 
-  const sortedTurns = Array.from(stonesByTurn.keys()).sort((a, b) => a - b);
-  for (const turn of sortedTurns) {
-    const stones = stonesByTurn.get(turn);
-    if (stones.length >= 2) {
-      turns.push({ stones: [stones[0], stones[1]] });
-    }
-  }
-
-  return { turns };
+  return { stones };
 }
 
 // Convert cube {x,y,z} to axial {q,r}
@@ -102,17 +94,19 @@ const BOT_REGISTRY = {
     name: 'Kraken',
     /** Neural MCTS bot via remote API. */
     async move(cells, turn) {
-      const turnsObj = _cellsToTurnsObject(cells);
+      // Convert cells to stones format and stringify
+      const stonesObj = _cellsToStonesObject(cells);
+      const stonesJson = JSON.stringify(stonesObj); // "{\"stones\":[...]}"
+      
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
 
-        // Use sync endpoint first - send turns object directly, not as string
         const response = await fetch(`${KRAKEN_URL}/v1/compute/best-move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            position: { turnsJson: turnsObj },
+            position: { turnsJson: stonesJson },
             config: { botName: 'kraken' }
           }),
           signal: controller.signal,
@@ -121,7 +115,7 @@ const BOT_REGISTRY = {
         clearTimeout(timeout);
 
         if (!response.ok) {
-          return await _krakenMoveViaJob(cells, turnsObj);
+          return await _krakenMoveViaJob(cells, stonesJson);
         }
 
         const data = await response.json();
@@ -138,13 +132,13 @@ const BOT_REGISTRY = {
 };
 
 // Use job-based approach as fallback
-async function _krakenMoveViaJob(cells, turnsObj) {
+async function _krakenMoveViaJob(cells, stonesJson) {
   try {
     const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        position: { turnsJson: turnsObj },
+        position: { turnsJson: stonesJson },
         config: { botName: 'kraken' }
       }),
     });
