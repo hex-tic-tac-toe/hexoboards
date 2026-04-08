@@ -1,136 +1,88 @@
-# Kraken Bot Integration Findings
+# Kraken Bot Integration - Final Documentation
 
-## API Endpoints
+## Summary
 
-The 6-tac Worker exposes session-agnostic compute primitives:
+The 6-tac compute API is working correctly with the **turns format using cube coordinates**.
 
-- `POST /api/v1/compute/best-move` — Returns move immediately (sync)
-- `POST /api/v1/compute/eval` — Returns evaluation immediately (sync)
-- `POST /api/v1/compute/best-move/jobs` — Async job (returns jobId)
-- `POST /api/v1/compute/eval/jobs` — Async job (returns jobId)
-- `GET /api/v1/compute/jobs/:id` — Poll job status
+## Key Requirements
 
-## Request Format
+1. **Use `turns` format** - NOT `stones` format
+2. **Use cube coordinates `{x,y,z}`** - NOT axial `[q,r]`
+3. **Complete turns only** - each turn must have exactly 2 stones
+4. **Skip origin (0,0)** - center is implicitly occupied by Player One
+
+## Working Payload Format
 
 ```json
 {
-  "position": { "turnsJson": "{\"stones\":[[q,r],[q,r],...]}" },
+  "position": { "turnsJson": "{\"turns\":[{\"stones\":[{\"x\":1,\"y\":0,\"z\":-1},{\"x\":2,\"y\":0,\"z\":-2}]}]}" },
   "config": { "botName": "kraken" }
 }
 ```
 
-**Important:** Use `stones` format, NOT `turns` format!
+## Hexoboards → 6-tac Conversion
 
-- ✅ `{"stones":[[0,0],[-1,0]]}` - 2 stones (1 move)
-- ✅ `{"stones":[[0,0],[-1,0],[1,-1],[0,-1]]}` - 4 stones (2 moves)
-- ✅ `{"stones":[]}` - empty
-- ❌ `{"turns":[...]}` - FAILS with error 1101
-
-## Response Format
-
-**best-move:**
-```json
-{
-  "stones": [{ "x": 0, "y": 1, "z": -1 }, { "x": -1, "y": 0, "z": 1 }],
-  "modelVersion": "kraken_v1",
-  "positionId": "..."
+```javascript
+function _cellsToTurnsObject(cells) {
+  const turns = [];
+  const cellsArray = Array.from(cells.values())
+    .filter(c => c.state !== 0)
+    .sort((a, b) => a.turn - b.turn);
+  
+  let currentTurn = null;
+  let turnIndex = 0;
+  
+  for (const cell of cellsArray) {
+    // Skip origin (0,0) - implicitly occupied by Player One
+    if (cell.q === 0 && cell.r === 0) continue;
+    
+    // Turn mapping: turn0 is implicit, turns1-2 = pair 0, turns3-4 = pair 1
+    let targetTurnIndex;
+    if (cell.turn <= 0) {
+      targetTurnIndex = 0;
+    } else {
+      targetTurnIndex = Math.floor((cell.turn - 1) / 2);
+    }
+    
+    if (!currentTurn || turnIndex !== targetTurnIndex) {
+      currentTurn = { stones: [] };
+      turns.push(currentTurn);
+      turnIndex = targetTurnIndex;
+    }
+    
+    // Convert axial (q,r) to cube (x,y,z)
+    currentTurn.stones.push({
+      x: cell.q,
+      y: -cell.q - cell.r,
+      z: cell.r
+    });
+  }
+  
+  return { turns };
 }
 ```
 
-**eval:**
-```json
-{
-  "score": -0.02,
-  "winProb": 0.49,
-  "bestMove": [{ "x": 0, "y": 1, "z": -1 }, { "x": -1, "y": 0, "z": 1 }],
-  "modelVersion": "kraken_v1",
-  "positionId": "..."
-}
-```
+## API Behavior
 
-## Current Implementation Behavior
+| Format | Works? | Response |
+|--------|--------|----------|
+| `{"stones":[]}` | ✓ But ignores position | Fixed inner ring |
+| `{"stones":[[q,r]]}` | ✓ But ignores position | Fixed inner ring |
+| `{"turns":[]}` | ✓ Works | Position-aware |
+| `{"turns":[{"stones":[{x,y,z}, {x,y,z}]}]}` | ✓ Works | Position-aware |
+| `{"turns":[{"stones":[{x,y,z}]}]}` (1 stone) | ✗ Error 1101 | Needs 2 stones |
 
-1. **Sync endpoint first** - `/v1/compute/best-move` and `/v1/compute/eval`
-2. **On failure** - Bot returns `null`, eval falls back to 0.5 (equal)
-3. **User experience** - Move is cancelled, user can retry or switch bots
+## Verified Working
 
-## Implementation Notes
-
-### Hexoboards → 6-tac Format
-
-Convert cells to stones array (sorted by turn):
-```javascript
-const stones = cellsArray
-  .filter(c => c.state !== 0)
-  .sort((a, b) => a.turn - b.turn)
-  .map(c => [c.q, c.r]);
-// Send as: JSON.stringify({ stones })
-```
-
-### 6-tac → Hexoboards Coordinate Conversion
-
-6-tac returns cube coordinates `{x, y, z}`:
-```javascript
-const q = cube.x;
-const r = cube.z;
-```
-
-### Score Normalization
-
-6-tac: negative = X winning, positive = O winning  
-Hexoboards: 0 = X winning, 0.5 = equal, 1 = O winning
-
-Conversion: `0.5 + (score / 2)`
+- ✅ Best-move responds to position (different moves for different boards)
+- ✅ Eval responds to position (scores vary: -0.02 → -0.009 → 0.54)
+- ✅ Position IDs change for different positions
+- ✅ Complete turns (2 stones each) work correctly
 
 ## Files Modified
 
-- `public/strategies/js/modules/Bot.js` — Kraken bot with stones format
-- `public/strategies/js/modules/Eval.js` — Eval with stones format
-- `src/index.js` — Cloudflare Worker proxy
-- `dev_server.py` — Python dev server proxy
-- `docs/kraken-integration.md` — This documentation
-
-## Implementation Notes
-
-### Hexoboards → 6-tac Format Conversion
-
-Hexoboards cells map to 6-tac turnsJson:
-```javascript
-// cells: Map<"q,r", {q, r, state, turn}>
-// turnsJson: "{\"turns\":[{\"stones\":[[q,r],[q,r]]},...]}"
-```
-
-### Critical Fix: Chronological Ordering
-IMPORTANT: Stones must be sent in chronological order by turn number. Without sorting, the API receives moves in a seemingly random order (based on Map iteration), which causes it to evaluate incorrect positions and return seemingly random or repetitive results.
-
-Fixed in Eval.js line 65: `.sort((a, b) => a.turn - b.turn)`
-
-### 6-tac → Hexoboards Coordinate Conversion
-
-6-tac returns cube coordinates `{x, y, z}`:
-```javascript
-const q = cube.x;
-const r = cube.z;
-```
-
-### Score Normalization
-
-6-tac returns `score` where:
-- negative = X winning
-- 0 = equal  
-- positive = O winning
-
-Hexoboards eval bar uses 0-1 where:
-- 0 = X winning
-- 0.5 = equal
-- 1 = O winning
-
-Conversion: `0.5 + (score / 2)`
-
-## Files Modified
-
-- `public/strategies/js/modules/Bot.js` — Kraken bot with sync API, returns null on failure
-- `public/strategies/js/modules/Eval.js` — Eval with sync API, falls back to 0.5 on failure  
-- `src/index.js` — Cloudflare Worker proxy (allows GET for job status)
-- `dev_server.py` — Python dev server proxy (supports GET/POST)
-- `docs/kraken-integration.md` — This documentation
+- `public/strategies/js/modules/Bot.js` - Uses turns format with cube coords
+- `public/strategies/js/modules/Eval.js` - Uses turns format with cube coords
+- `tests/api-format.test.mjs` - Working test cases
+- `tests/api-format-extended.test.mjs` - Extended test cases
+- `docs/kraken-integration.md` - This documentation

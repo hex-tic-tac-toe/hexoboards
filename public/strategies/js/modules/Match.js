@@ -132,6 +132,7 @@ const Match = {
     if (hasTree) {
       Match._boardActive = true;
     } else {
+      Eval.reset(); // Clear eval cache for fresh game
       Match.tree        = MatchNode.create({ turn: 0 });
       Match.currentNode = Match.tree;
     }
@@ -178,10 +179,9 @@ const Match = {
 
   loadFromGrid(grid) {
     const cells = new Map();
-    for (const cell of grid.cells.values())
-      if (cell.state) cells.set(HexGrid.key(cell.q, cell.r), { q: cell.q, r: cell.r, state: cell.state, legal: false });
     let turn = 0;
-    for (const c of cells.values()) if (c.state) turn++;
+    for (const cell of grid.cells.values())
+      if (cell.state) cells.set(HexGrid.key(cell.q, cell.r), { q: cell.q, r: cell.r, state: cell.state, turn: turn++, legal: false });
     Match.tree            = MatchNode.create({ turn, grid: { cells } });
     Match.currentNode     = Match.tree;
     Match._lastBoardEmpty = cells.size === 0;
@@ -326,7 +326,7 @@ const Match = {
     const state    = Match._getNextState();
     const turn     = Match._getTurn();
     const newCells = new Map(Array.from(cells, ([k,c]) => [k, {...c}]));
-    newCells.set(HexGrid.key(q, r), { q, r, state, legal: false });
+    newCells.set(HexGrid.key(q, r), { q, r, state, turn, legal: false });
 
     const newNode = MatchNode.create({
       parent:   Match.currentNode,
@@ -358,8 +358,8 @@ const Match = {
       }
     });
 
-    // Async eval computation (non-blocking)
-    Eval.evaluate(newCells, turn + 1).then(score => {
+    // Async eval computation (non-blocking) - use node ID for caching
+    Eval.evaluate(newCells, newNode.id).then(score => {
       newNode.eval = score;
       if (!skipRender) { Match._save(); Match._renderTree(); Match._renderEvalBar(score); }
     });
@@ -943,6 +943,7 @@ const Match = {
     } catch {}
     Match.tree=MatchNode.create({turn:0}); Match.currentNode=Match.tree;
     Match._collapsedChildren = new Set();
+    Eval.reset(); // Clear eval cache on new game
     Match.viewOffset = {x:0,y:0}; Match.viewZoom=1;
   },
 
@@ -1100,7 +1101,7 @@ const Match = {
           const state = (t % 4 === 0 || t % 4 === 3) ? 1 : 2;
           const playerName = state === 1 ? playerX : playerO;
           const cells = new Map(Array.from(cursor.node.grid.cells, ([k, c]) => [k, { ...c }]));
-          cells.set(HexGrid.key(q, r), { q, r, state, legal: false });
+          cells.set(HexGrid.key(q, r), { q, r, state, turn: t, legal: false });
           const newNode = MatchNode.create({
             parent:   cursor.node,
             turn:     t + 1,
@@ -1121,7 +1122,7 @@ const Match = {
           const state = (t % 4 === 0 || t % 4 === 3) ? 1 : 2;
           const playerName = state === 1 ? playerX : playerO;
           const cells = new Map(Array.from(cursor.node.grid.cells, ([k, c]) => [k, { ...c }]));
-          cells.set(HexGrid.key(q, r), { q, r, state, legal: false });
+          cells.set(HexGrid.key(q, r), { q, r, state, turn: t, legal: false });
           const newNode = MatchNode.create({
             parent:   cursor.node,
             turn:     t + 1,
@@ -1171,9 +1172,9 @@ const Match = {
       }
     });
 
-    // Compute missing evals in background
+    // Compute missing evals in background (use node ID for caching)
     evalToCompute.forEach(({ node, idx }) => {
-      Eval.evaluate(node.grid.cells, node.turn).then(score => {
+      Eval.evaluate(node.grid.cells, node.id).then(score => {
         node.eval = score;
         if (idx === positions.indexOf(Match.currentNode)) {
           Match._renderEvalBar(score);

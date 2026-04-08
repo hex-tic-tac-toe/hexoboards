@@ -8,9 +8,6 @@
  *   move(cells, turn) → { q, r } | null
  *       cells: Map<"q,r", {q,r,state,legal}> — current visible cell map
  *       turn:  integer (same as Match._getTurn())
- *
- * Everything mocked for now. Real implementations drop in by replacing
- * the move() function and leaving the rest of the structure intact.
  */
 
 import { HexGrid } from './HexGrid.js';
@@ -20,7 +17,9 @@ import { HexGrid } from './HexGrid.js';
 const KRAKEN_URL = '/api/kraken';
 const KRAKEN_TIMEOUT_MS = 30000;
 
-// ── helpers shared by all bots ───────────────────────────────────────────────
+// ── shared utilities ─────────────────────────────────────────────────────────
+
+import { cellsToTurnsObject, cubeToAxial } from './ApiUtils.js';
 
 function _legalMoves(cells) {
   const moves = [];
@@ -34,33 +33,7 @@ function _randomFrom(arr) {
   return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
 }
 
-// Convert hexoboards cells to six-tac stones format
-// Format: {"stones":[[q,r],[q,r],...]}
-// IMPORTANT: Must sort by turn to send moves in chronological order
-function _cellsToStonesObject(cells) {
-  const stones = [];
-
-  // Get all occupied cells and sort by turn chronologically
-  const cellsArray = Array.from(cells.values())
-    .filter(c => c.state !== 0)
-    .sort((a, b) => a.turn - b.turn);
-
-  for (const cell of cellsArray) {
-    stones.push([cell.q, cell.r]);
-  }
-
-  return { stones };
-}
-
-// Convert cube {x,y,z} to axial {q,r}
-function _cubeToAxial(stone) {
-  // Handle both object {x,y,z} and array [q,r] formats
-  if (Array.isArray(stone)) return { q: stone[0], r: stone[1] };
-  return { q: stone.x, r: stone.z };
-}
-
 // Check if two consecutive turns belong to the same player
-// Hextic turn structure: X plays 1 (turn 0), then pairs: OO XX OO XX …
 function _samePlayer(turnA, turnB) {
   const p = t => { const i = t % 4; return (i === 0 || i === 3) ? 1 : 2; };
   return p(turnA) === p(turnB);
@@ -91,7 +64,6 @@ const BOT_REGISTRY = {
   random: {
     id:   'random',
     name: 'Random',
-    /** Plays a uniformly random legal move. */
     move(cells /*, turn */) {
       return _randomFrom(_legalMoves(cells));
     },
@@ -100,8 +72,9 @@ const BOT_REGISTRY = {
   kraken: {
     id:   'kraken',
     name: 'Kraken',
-    _cache: null, // { turn, move } — second move of the pair
-    /** Neural MCTS bot via remote API. */
+    _cache: null,
+    _lastPositionId: null,
+    
     async move(cells, turn) {
       // Return cached second move if it matches the expected turn
       if (this._cache && this._cache.turn === turn) {
@@ -111,9 +84,24 @@ const BOT_REGISTRY = {
       }
       this._cache = null;
 
-      // Convert cells to stones format and stringify
-      const stonesObj = _cellsToStonesObject(cells);
-      const stonesJson = JSON.stringify(stonesObj); // "{\"stones\":[...]}"
+      const turnsObj = cellsToTurnsObject(cells);
+      const turnsJson = JSON.stringify(turnsObj);
+      
+      // Simple position key for deduplication (use hash if available, otherwise substring)
+      let positionKey = turnsJson;
+      if (turnsJson.length > 15 && crypto && crypto.subtle) {
+        try {
+          const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(turnsJson));
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          positionKey = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+        } catch {}
+      }
+      
+      // Simple deduplication - skip if same position as last call
+      if (positionKey === this._lastPositionId) {
+        return null;
+      }
+      this._lastPositionId = positionKey;
       
       try {
         const controller = new AbortController();
@@ -123,7 +111,7 @@ const BOT_REGISTRY = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            position: { turnsJson: stonesJson },
+            position: { turnsJson: turnsJson },
             config: { botName: 'kraken' }
           }),
           signal: controller.signal,
@@ -132,34 +120,33 @@ const BOT_REGISTRY = {
         clearTimeout(timeout);
 
         if (!response.ok) {
-          return await _krakenMoveViaJob(cells, stonesJson, turn);
+          // Try job-based fallback once
+          return await _krakenMoveViaJob(cells, turnsJson, turn, cubeToAxial);
         }
 
         const data = await response.json();
         if (data.stones && data.stones.length >= 1) {
-          const first = _cubeToAxial(data.stones[0]);
-          // Only cache second move if the next turn belongs to the same player
+          const first = cubeToAxial(data.stones[0]);
           if (data.stones.length >= 2 && _samePlayer(turn, turn + 1)) {
-            this._cache = { turn: turn + 1, move: _cubeToAxial(data.stones[1]) };
+            this._cache = { turn: turn + 1, move: cubeToAxial(data.stones[1]) };
           }
           return first;
         }
-      } catch {
-        // Fall back to job-based
+      } catch (e) {
+        console.warn('Kraken move failed:', e.message);
       }
       return null;
     },
   },
 };
 
-// Use job-based approach as fallback
-async function _krakenMoveViaJob(cells, stonesJson, turn) {
+async function _krakenMoveViaJob(cells, turnsJson, turn, cubeToAxial) {
   try {
     const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        position: { turnsJson: stonesJson },
+        position: { turnsJson: turnsJson },
         config: { botName: 'kraken' }
       }),
     });
@@ -175,36 +162,37 @@ async function _krakenMoveViaJob(cells, stonesJson, turn) {
     clearTimeout(waitTimeout);
 
     if (result && result.stones && result.stones.length >= 1) {
-      const first = _cubeToAxial(result.stones[0]);
+      const first = cubeToAxial(result.stones[0]);
       if (result.stones.length >= 2 && _samePlayer(turn, turn + 1)) {
-        BOT_REGISTRY.kraken._cache = { turn: turn + 1, move: _cubeToAxial(result.stones[1]) };
+        BOT_REGISTRY.kraken._cache = { turn: turn + 1, move: cubeToAxial(result.stones[1]) };
       }
       return first;
     }
-  } catch { }
+  } catch (e) {
+    console.warn('Kraken job failed:', e.message);
+  }
   return null;
 }
 
 // ── public API ────────────────────────────────────────────────────────────────
 
 const Bot = {
-  /** All available bots as an ordered array. */
   list: () => Object.values(BOT_REGISTRY),
-
-  /** Get a bot by id, or null. */
   get: id => BOT_REGISTRY[id] ?? null,
 
-  /**
-   * Ask a bot to compute a move.
-   * Returns { q, r } or null if no legal move exists.
-   * Wraps in a microtask so callers can treat it as async even now.
-   */
   async computeMove(botId, cells, turn) {
     const bot = BOT_REGISTRY[botId];
     if (!bot) return null;
-    // Yield to allow UI to update before potentially heavy work
     await new Promise(r => setTimeout(r, 0));
     return bot.move(cells, turn);
+  },
+  
+  // Clear caches (useful when game resets)
+  resetCaches() {
+    for (const bot of Object.values(BOT_REGISTRY)) {
+      if (bot._cache) bot._cache = null;
+      if (bot._lastPositionId) bot._lastPositionId = null;
+    }
   },
 };
 

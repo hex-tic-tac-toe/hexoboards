@@ -117,7 +117,7 @@ const Analyzer = {
       newGrid.cells.set(key, { ...cell });
     }
     
-    newGrid.cells.set(`${q},${r}`, { q, r, state, legal: false });
+    newGrid.cells.set(`${q},${r}`, { q, r, state, turn, legal: false });
     
     const newNode = AnalyzerNode.create({
       parent: Analyzer.currentNode,
