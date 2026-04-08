@@ -80,7 +80,7 @@ const r = cube.z;
 6-tac: negative = X winning, positive = O winning  
 Hexoboards: 0 = X winning, 0.5 = equal, 1 = O winning
 
-Conversion: `0.5 - (score / 2)`
+Conversion: `0.5 + (score / 2)`
 
 ## Files Modified
 
