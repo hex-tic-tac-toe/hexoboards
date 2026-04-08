@@ -976,8 +976,17 @@ const Match = {
     const positions = Match._nodeToArray(Match.tree);
     const focusIndex = positions.indexOf(Match.currentNode);
 
+    // Collect labels: map position index to label object
+    const labels = {};
+    positions.forEach((node, idx) => {
+      if (node.label && idx > 0) {
+        labels[idx] = node.label;
+      }
+    });
+
     let out = JSON.stringify(serialized);
     if (focusIndex > 0) out += ';' + focusIndex;
+    if (Object.keys(labels).length > 0) out += ';' + JSON.stringify(labels);
     return out;
   },
 
@@ -990,11 +999,27 @@ const Match = {
   fromHextic(text, players = null) {
     if (!text?.trim()) return false;
 
-    let treeText = text, focusIndex = -1;
-    const semi = text.indexOf(';');
-    if (semi > 0) {
-      treeText   = text.slice(0, semi);
-      focusIndex = parseInt(text.slice(semi + 1), 10);
+    let treeText = text, focusIndex = -1, labels = null;
+    const firstSemi = text.indexOf(';');
+    if (firstSemi > 0) {
+      const rest = text.slice(firstSemi + 1);
+      // Check if rest starts with { (labels JSON)
+      if (rest.trim().startsWith('{')) {
+        try {
+          labels = JSON.parse(rest);
+        } catch { labels = null; }
+      } else {
+        // Try parse as focusIndex;labels
+        const secondSemi = rest.indexOf(';');
+        if (secondSemi > 0) {
+          focusIndex = parseInt(rest.slice(0, secondSemi), 10);
+          try {
+            labels = JSON.parse(rest.slice(secondSemi + 1));
+          } catch { labels = null; }
+        } else {
+          focusIndex = parseInt(rest, 10);
+        }
+      }
     }
 
     let data;
@@ -1076,6 +1101,15 @@ const Match = {
     Match.currentNode = (focusIndex >= 0 && focusIndex < positions.length)
       ? positions[focusIndex]
       : Match.tree;
+
+    // Restore labels if provided
+    if (labels) {
+      positions.forEach((node, idx) => {
+        if (labels[idx]) {
+          node.label = labels[idx];
+        }
+      });
+    }
 
     // Sync winCells from current node
     Match.winCells = Match.currentNode.isWin ? Match.currentNode.winRun : null;
