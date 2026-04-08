@@ -36,15 +36,21 @@ function _cellsToTurnsJson(cells) {
 }
 
 // Poll job until complete
-async function _waitForJob(jobId) {
+async function _waitForJob(jobId, signal) {
   const maxAttempts = 60;
   const interval = 500;
   for (let i = 0; i < maxAttempts; i++) {
-    const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
-    if (!resp.ok) break;
-    const job = await resp.json();
-    if (job.status === 'done') return job.result;
-    if (job.status === 'failed') break;
+    if (signal?.aborted) return null;
+    try {
+      const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
+      if (!resp.ok) break;
+      const job = await resp.json();
+      if (job.status === 'done') return job.result;
+      if (job.status === 'failed') {
+        console.error('Kraken eval job failed:', job.error);
+        return null;
+      }
+    } catch { break; }
     await new Promise(r => setTimeout(r, interval));
   }
   return null;
@@ -61,6 +67,9 @@ const Eval = {
     const turnsJson = _cellsToTurnsJson(cells);
 
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
+
       // Create async job
       const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/eval/jobs`, {
         method: 'POST',
@@ -69,7 +78,10 @@ const Eval = {
           position: { turnsJson },
           config: { botName: 'kraken' }
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!jobResponse.ok) {
         return 0.5;
@@ -80,11 +92,15 @@ const Eval = {
         return 0.5;
       }
 
-      // Wait for job completion
-      const result = await _waitForJob(job.jobId);
+      // Wait for job completion (with timeout)
+      const waitController = new AbortController();
+      const waitTimeout = setTimeout(() => waitController.abort(), KRAKEN_TIMEOUT_MS);
+      const result = await _waitForJob(job.jobId, waitController);
+      clearTimeout(waitTimeout);
+
       if (result && typeof result.score === 'number' && Number.isFinite(result.score)) {
         // Kraken returns score where negative = X winning, positive = O winning
-        // Convert to 0-1 range: 0.5 + (score / 2) → 0 = X win, 0.5 = equal, 1 = O win
+        // Convert to 0-1 range: 0.5 - (score / 2) → 0 = X win, 0.5 = equal, 1 = O win
         const normalized = 0.5 - (result.score / 2);
         return Math.max(0, Math.min(1, normalized));
       }

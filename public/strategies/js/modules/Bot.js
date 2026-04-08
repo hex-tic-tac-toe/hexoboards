@@ -68,15 +68,21 @@ function _cubeToAxial(cube) {
 }
 
 // Poll job until complete
-async function _waitForJob(jobId) {
+async function _waitForJob(jobId, signal) {
   const maxAttempts = 60;
   const interval = 500;
   for (let i = 0; i < maxAttempts; i++) {
-    const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
-    if (!resp.ok) break;
-    const job = await resp.json();
-    if (job.status === 'done') return job.result;
-    if (job.status === 'failed') break;
+    if (signal?.aborted) return null;
+    try {
+      const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
+      if (!resp.ok) break;
+      const job = await resp.json();
+      if (job.status === 'done') return job.result;
+      if (job.status === 'failed') {
+        console.error('Kraken job failed:', job.error);
+        return null;
+      }
+    } catch { break; }
     await new Promise(r => setTimeout(r, interval));
   }
   return null;
@@ -101,6 +107,9 @@ const BOT_REGISTRY = {
     async move(cells, turn) {
       const turnsJson = _cellsToTurnsJson(cells);
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
+
         // Create async job
         const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
           method: 'POST',
@@ -109,7 +118,10 @@ const BOT_REGISTRY = {
             position: { turnsJson },
             config: { botName: 'kraken' }
           }),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeout);
 
         if (!jobResponse.ok) {
           console.error('Kraken job error:', jobResponse.status);
@@ -121,8 +133,12 @@ const BOT_REGISTRY = {
           return _randomFrom(_legalMoves(cells));
         }
 
-        // Wait for job completion
-        const result = await _waitForJob(job.jobId);
+        // Wait for job completion (with timeout)
+        const waitController = new AbortController();
+        const waitTimeout = setTimeout(() => waitController.abort(), KRAKEN_TIMEOUT_MS);
+        const result = await _waitForJob(job.jobId, waitController);
+        clearTimeout(waitTimeout);
+
         if (result && result.stones && result.stones.length >= 2) {
           const first = result.stones[0];
           return _cubeToAxial(first);
