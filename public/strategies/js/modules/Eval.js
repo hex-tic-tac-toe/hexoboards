@@ -7,12 +7,8 @@
  * score = 0.0 (X winning) … 0.5 (equal) … 1.0 (O winning)
  */
 
-import { cellsToTurnsObject } from './ApiUtils.js';
+import { cellsToTurnsObject, krakenEval } from './ApiUtils.js';
 
-const KRAKEN_URL = '/api/kraken';
-const KRAKEN_TIMEOUT_MS = 15000;
-
-// Cache eval per node ID
 const _evalCache = new Map();
 
 const Eval = {
@@ -23,72 +19,30 @@ const Eval = {
    * @returns {number|null} 0.0–1.0, or null if unavailable
    */
   async evaluate(cells, nodeId) {
-    // Return cached value if available
     if (_evalCache.has(nodeId)) {
       return _evalCache.get(nodeId);
     }
     
     const turnsObj = cellsToTurnsObject(cells);
     const turnsJson = JSON.stringify(turnsObj);
-
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
-
-      const response = await fetch(`${KRAKEN_URL}/v1/compute/eval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          position: { turnsJson: turnsJson },
-          config: { botName: 'kraken' }
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json();
-      let score = null;
-      
-      // Prefer winProb (X win probability) when available
-      if (typeof data.winProb === 'number' && Number.isFinite(data.winProb)) {
-        score = Math.max(0, Math.min(1, 1 - data.winProb));
-      } else if (typeof data.score === 'number' && Number.isFinite(data.score)) {
-        score = Math.max(0, Math.min(1, 0.5 + (data.score / 2)));
-      }
-      
-      // Cache the result
-      if (score !== null) {
-        _evalCache.set(nodeId, score);
-      }
-      
-      return score;
-    } catch (e) {
-      return null;
+    
+    const result = await krakenEval(turnsJson);
+    
+    if (result.score !== null) {
+      _evalCache.set(nodeId, result.score);
     }
+    
+    return result.score;
   },
 
-  /**
-   * Get cached eval for a node without fetching
-   */
   getCached(nodeId) {
     return _evalCache.get(nodeId) ?? null;
   },
 
-  /**
-   * Clear all cached evals (call on game reset)
-   */
   reset() {
     _evalCache.clear();
   },
 
-  /**
-   * Remove eval for a specific node
-   */
   invalidate(nodeId) {
     _evalCache.delete(nodeId);
   },
@@ -101,7 +55,6 @@ const Eval = {
   render(container, score) {
     container.innerHTML = '';
 
-    // Hide if no valid score
     if (score === null || typeof score !== 'number') {
       container.style.display = 'none';
       return;

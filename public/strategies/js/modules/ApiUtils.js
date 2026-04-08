@@ -59,3 +59,56 @@ export function cubeToAxial(stone) {
   if (Array.isArray(stone)) return { q: stone[0], r: stone[1] };
   return { q: stone.x, r: stone.z };
 }
+
+const KRAKEN_URL = '/api/kraken';
+const KRAKEN_TIMEOUT_MS = 30000;
+
+/**
+ * Call the eval endpoint and return both score and bestMove.
+ * This is the single source of truth for Kraken API calls.
+ * @param {string} turnsJson - JSON string of turns object
+ * @returns {{ score: number|null, bestMove: Array<{q,r}>|null }}
+ */
+export async function krakenEval(turnsJson) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
+
+    const response = await fetch(`${KRAKEN_URL}/v1/compute/eval`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        position: { turnsJson: turnsJson },
+        config: { botName: 'kraken' }
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return { score: null, bestMove: null };
+    }
+
+    const data = await response.json();
+    
+    // Parse score
+    let score = null;
+    if (typeof data.winProb === 'number' && Number.isFinite(data.winProb)) {
+      score = Math.max(0, Math.min(1, 1 - data.winProb));
+    } else if (typeof data.score === 'number' && Number.isFinite(data.score)) {
+      score = Math.max(0, Math.min(1, 0.5 + (data.score / 2)));
+    }
+    
+    // Parse bestMove (array of cube coordinates)
+    let bestMove = null;
+    if (data.bestMove && Array.isArray(data.bestMove) && data.bestMove.length >= 1) {
+      bestMove = data.bestMove.map(cubeToAxial);
+    }
+    
+    return { score, bestMove };
+  } catch (e) {
+    console.warn('Kraken eval failed:', e.message);
+    return { score: null, bestMove: null };
+  }
+}

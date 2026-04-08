@@ -11,6 +11,7 @@
  */
 
 import { HexGrid } from './HexGrid.js';
+import { cellsToTurnsObject, krakenEval } from './ApiUtils.js';
 
 // ── configuration ─────────────────────────────────────────────────────────────
 
@@ -18,8 +19,6 @@ const KRAKEN_URL = '/api/kraken';
 const KRAKEN_TIMEOUT_MS = 30000;
 
 // ── shared utilities ─────────────────────────────────────────────────────────
-
-import { cellsToTurnsObject, cubeToAxial } from './ApiUtils.js';
 
 function _legalMoves(cells) {
   const moves = [];
@@ -37,25 +36,6 @@ function _randomFrom(arr) {
 function _samePlayer(turnA, turnB) {
   const p = t => { const i = t % 4; return (i === 0 || i === 3) ? 1 : 2; };
   return p(turnA) === p(turnB);
-}
-
-// Poll job until complete
-async function _waitForJob(jobId, signal) {
-  const maxAttempts = 20;
-  const interval = 500;
-  for (let i = 0; i < maxAttempts; i++) {
-    if (signal?.aborted) return null;
-    try {
-      const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
-      if (!resp.ok) return null;
-      const job = await resp.json();
-      if (job.status === 'done' && job.result) return job.result;
-      if (job.status === 'failed' || job.status === 'done') return null;
-      if (job.status === 'running' && i >= 5) return null;
-    } catch { return null; }
-    await new Promise(r => setTimeout(r, interval));
-  }
-  return null;
 }
 
 // ── registry ─────────────────────────────────────────────────────────────────
@@ -87,7 +67,7 @@ const BOT_REGISTRY = {
       const turnsObj = cellsToTurnsObject(cells);
       const turnsJson = JSON.stringify(turnsObj);
       
-      // Simple position key for deduplication (use hash if available, otherwise substring)
+      // Simple position key for deduplication
       let positionKey = turnsJson;
       if (turnsJson.length > 15 && crypto && crypto.subtle) {
         try {
@@ -97,50 +77,71 @@ const BOT_REGISTRY = {
         } catch {}
       }
       
-      // Simple deduplication - skip if same position as last call
+      // Skip if same position as last call
       if (positionKey === this._lastPositionId) {
         return null;
       }
       this._lastPositionId = positionKey;
       
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
-
-        const response = await fetch(`${KRAKEN_URL}/v1/compute/best-move`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            position: { turnsJson: turnsJson },
-            config: { botName: 'kraken' }
-          }),
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-          // Try job-based fallback once
-          return await _krakenMoveViaJob(cells, turnsJson, turn, cubeToAxial);
+      // Use eval endpoint (returns both score and bestMove)
+      const result = await krakenEval(turnsJson);
+      
+      if (result.bestMove && result.bestMove.length >= 1) {
+        const first = result.bestMove[0];
+        if (result.bestMove.length >= 2 && _samePlayer(turn, turn + 1)) {
+          this._cache = { turn: turn + 1, move: result.bestMove[1] };
         }
-
-        const data = await response.json();
-        if (data.stones && data.stones.length >= 1) {
-          const first = cubeToAxial(data.stones[0]);
-          if (data.stones.length >= 2 && _samePlayer(turn, turn + 1)) {
-            this._cache = { turn: turn + 1, move: cubeToAxial(data.stones[1]) };
-          }
-          return first;
-        }
-      } catch (e) {
-        console.warn('Kraken move failed:', e.message);
+        return first;
       }
+      
       return null;
     },
   },
 };
 
-async function _krakenMoveViaJob(cells, turnsJson, turn, cubeToAxial) {
+// ── DEPRECATED: best-move endpoint code (kept for reference) ──────────────────
+// The best-move endpoint was causing issues with longer games (~20 moves).
+// Now using the eval endpoint which returns bestMove in the response.
+
+/*
+async function _krakenMoveViaBestMove(turnsJson, turn) {
+  const { cubeToAxial } = await import('./ApiUtils.js');
+  
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
+
+    const response = await fetch(`${KRAKEN_URL}/v1/compute/best-move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        position: { turnsJson: turnsJson },
+        config: { botName: 'kraken' }
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return await _krakenMoveViaJob(turnsJson, turn, cubeToAxial);
+    }
+
+    const data = await response.json();
+    if (data.stones && data.stones.length >= 1) {
+      const first = cubeToAxial(data.stones[0]);
+      if (data.stones.length >= 2 && _samePlayer(turn, turn + 1)) {
+        BOT_REGISTRY.kraken._cache = { turn: turn + 1, move: cubeToAxial(data.stones[1]) };
+      }
+      return first;
+    }
+  } catch (e) {
+    console.warn('Kraken best-move failed:', e.message);
+  }
+  return null;
+}
+
+async function _krakenMoveViaJob(turnsJson, turn, cubeToAxial) {
   try {
     const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
       method: 'POST',
@@ -156,11 +157,7 @@ async function _krakenMoveViaJob(cells, turnsJson, turn, cubeToAxial) {
     const job = await jobResponse.json();
     if (!job.jobId) return null;
 
-    const waitController = new AbortController();
-    const waitTimeout = setTimeout(() => waitController.abort(), 10000);
-    const result = await _waitForJob(job.jobId, waitController);
-    clearTimeout(waitTimeout);
-
+    const result = await _waitForJob(job.jobId);
     if (result && result.stones && result.stones.length >= 1) {
       const first = cubeToAxial(result.stones[0]);
       if (result.stones.length >= 2 && _samePlayer(turn, turn + 1)) {
@@ -173,6 +170,25 @@ async function _krakenMoveViaJob(cells, turnsJson, turn, cubeToAxial) {
   }
   return null;
 }
+
+async function _waitForJob(jobId, signal) {
+  const maxAttempts = 20;
+  const interval = 500;
+  for (let i = 0; i < maxAttempts; i++) {
+    if (signal?.aborted) return null;
+    try {
+      const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
+      if (!resp.ok) return null;
+      const job = await resp.json();
+      if (job.status === 'done' && job.result) return job.result;
+      if (job.status === 'failed' || job.status === 'done') return null;
+      if (job.status === 'running' && i >= 5) return null;
+    } catch { return null; }
+    await new Promise(r => setTimeout(r, interval));
+  }
+  return null;
+}
+*/
 
 // ── public API ────────────────────────────────────────────────────────────────
 
@@ -187,7 +203,6 @@ const Bot = {
     return bot.move(cells, turn);
   },
   
-  // Clear caches (useful when game resets)
   resetCaches() {
     for (const bot of Object.values(BOT_REGISTRY)) {
       if (bot._cache) bot._cache = null;
