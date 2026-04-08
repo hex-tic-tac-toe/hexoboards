@@ -25,7 +25,6 @@ function normalizeForwardedHost(value) {
 }
 
 function publicRequestUrl(request) {
-  const requestUrl = new URL(request.url);
   const forwardedHost = normalizeForwardedHost(request.headers.get('x-forwarded-host'));
   const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim();
 
@@ -38,8 +37,6 @@ function publicRequestUrl(request) {
     url.protocol = `${forwardedProto}:`;
   }
 
-  url.pathname = requestUrl.pathname;
-  url.search = requestUrl.search;
   url.hash = '';
   return url;
 }
@@ -398,7 +395,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/kraken/')) {
-      const krakenPath = url.pathname.replace(/^\/api\/kraken/, '') || '/v1/best-move';
+      const krakenPath = '/api' + (url.pathname.replace(/^\/api\/kraken/, '') || '/v1/best-move');
       return proxyKraken(krakenPath, url.search, request);
     }
 

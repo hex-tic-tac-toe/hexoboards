@@ -14,7 +14,6 @@ const KRAKEN_TIMEOUT_MS = 60000;
 function _cellsToStonesObject(cells) {
   const stones = [];
   const cellsArray = Array.from(cells.values()).filter(c => c.state !== 0);
-  cellsArray.sort((a, b) => a.turn - b.turn);
   for (const cell of cellsArray) {
     stones.push([cell.q, cell.r]);
   }

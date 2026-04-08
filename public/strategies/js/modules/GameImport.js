@@ -74,7 +74,7 @@ const GameImport = {
           }
         }
         if (moves.length > 0) return { moves, players };
-      } catch (e) { console.log('JSON parse failed', e.message); }
+      } catch (e) { /* JSON parse failed, try other methods */ }
     }
     
     // Try window.__GAME_DATA__ or similar

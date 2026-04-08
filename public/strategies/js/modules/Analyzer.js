@@ -135,44 +135,8 @@ const Analyzer = {
     Analyzer._buildBoard();
   },
 
-  _commitMovePair() {
-  },
-
   _fork(q, r) {
-    const cells = Analyzer.currentNode.grid.cells;
-    
-    if (!Analyzer._isLegalMove(q, r, cells)) {
-      return;
-    }
-
-    const state = Analyzer._getExpectedState();
-    const turn = Analyzer.currentNode.turn;
-    const turnNum = Math.floor(turn / 2) + 1;
-    const moveInTurn = turn % 2 === 0 ? 'X' : 'O';
-    
-    const newGrid = {
-      cells: new Map()
-    };
-    for (const [key, cell] of cells) {
-      newGrid.cells.set(key, { ...cell });
-    }
-    
-    newGrid.cells.set(`${q},${r}`, { q, r, state, legal: false });
-    
-    const newNode = AnalyzerNode.create({
-      parent: Analyzer.currentNode,
-      turn: turn,
-      grid: newGrid,
-      lastMove: { q, r, state, turnNum, moveInTurn }
-    });
-    newNode.turn = turn + 1;
-    
-    Analyzer.currentNode.children.push(newNode);
-    Analyzer.currentNode = newNode;
-    
-    Analyzer._save();
-    Analyzer._renderTree();
-    Analyzer._buildBoard();
+    Analyzer._applyStone(q, r);
   },
 
   _goTo(node) {
@@ -374,7 +338,7 @@ const Analyzer = {
     if (!node.parent) return;
     const parent = node.parent;
     parent.children = parent.children.filter(c => c !== node);
-    if (Analyzer.currentNode === node || Analyzer._isDescendant(Analyzer.currentNode, node)) {
+    if (Analyzer.currentNode === node || Analyzer._isDescendant(node, Analyzer.currentNode)) {
       Analyzer.currentNode = parent;
     }
     Analyzer._save();
@@ -632,10 +596,11 @@ const Analyzer = {
     };
   },
 
-  _deserialize(data) {
+  _deserialize(data, parent = null) {
     const node = AnalyzerNode.create({ id: data.id, turn: data.turn, lastMove: data.lastMove });
+    node.parent = parent;
     node.grid.cells = new Map(data.grid.cells);
-    node.children = data.children.map(c => Analyzer._deserialize(c));
+    node.children = data.children.map(c => Analyzer._deserialize(c, node));
     return node;
   },
 };

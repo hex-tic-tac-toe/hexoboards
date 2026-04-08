@@ -93,8 +93,6 @@ const App = {
     GameImport.onImport = (hextic, gameId, players) => {
       if (Match.fromHextic(hextic, players)) {
         Match.title = `Imported from Hexo (${gameId.slice(0, 8)})`;
-        console.log('Import successful, Match.tree.isWin:', Match.tree.isWin, 'Match.tree.winRun size:', Match.tree.winRun?.size || 0);
-        console.log('Match.currentNode.isWin:', Match.currentNode.isWin, 'Match.currentNode.winRun size:', Match.currentNode.winRun?.size || 0);
         UI.showMatch(() => { Match._renderPlayPanel(); Match._renderNotePanel(); Match._renderTree(); Match._buildBoard(); });
         App._toast('game imported');
         document.getElementById('match-import-modal').hidden = true;

@@ -38,11 +38,9 @@ function _randomFrom(arr) {
 // Format: {"stones":[[q,r],[q,r],...]}
 function _cellsToStonesObject(cells) {
   const stones = [];
-  const turnOrder = [];
 
-  // Get all stones sorted by turn
+  // Get all occupied cells
   const cellsArray = Array.from(cells.values()).filter(c => c.state !== 0);
-  cellsArray.sort((a, b) => a.turn - b.turn);
 
   for (const cell of cellsArray) {
     stones.push([cell.q, cell.r]);

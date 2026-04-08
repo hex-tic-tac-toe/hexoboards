@@ -12,11 +12,6 @@
  */
 
 const MoveAnnotator = {
-  /** Axial hex directions. */
-  _DIRS: [
-    [1, 0], [0, 1], [1, -1],   // forward
-    [-1, 0], [0, -1], [-1, 1], // backward (paired with first 3)
-  ],
 
   /**
    * Annotate a freshly placed move.
