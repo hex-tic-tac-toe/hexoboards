@@ -47,6 +47,7 @@ const MatchNode = {
       grid:     opts.grid     || { cells: new Map() },
       lastMove: opts.lastMove || null,
       label:    opts.label    || null,  // { type, icon, text } or null
+      eval:     opts.eval     || null,  // 0-1 score or null (cached from Kraken)
       isWin:    opts.isWin    || false, // true when this move completed a 6-in-a-row
       winRun:   opts.winRun   || null,  // Set<"q,r"> of the winning cells
       children: [],
@@ -354,6 +355,12 @@ const Match = {
         newNode.label = label;
         if (!skipRender) { Match._save(); Match._renderTree(); }
       }
+    });
+
+    // Async eval computation (non-blocking)
+    Eval.evaluate(newCells, turn + 1).then(score => {
+      newNode.eval = score;
+      if (!skipRender) { Match._save(); Match._renderTree(); Match._renderEvalBar(score); }
     });
 
     Match._save();
@@ -771,7 +778,7 @@ const Match = {
     panel.appendChild(makePlayerRow('O', 'botO', 'botO'));
 
     // Eval bar rendered in dedicated toolbar-level element (between panels)
-    Match._renderEvalBar(0.5);
+    Match._renderEvalBar(Match.currentNode?.eval ?? 0.5);
   },
 
   _renderNotePanel() {
@@ -924,7 +931,7 @@ const Match = {
   },
 
   _serialize(node) {
-    return { id:node.id, turn:node.turn, lastMove:node.lastMove, label:node.label,
+    return { id:node.id, turn:node.turn, lastMove:node.lastMove, label:node.label, eval:node.eval ?? null,
       isWin: node.isWin || false,
       winRun: node.winRun ? Array.from(node.winRun) : null,
       grid:{cells:Array.from(node.grid.cells.entries())},
@@ -932,7 +939,7 @@ const Match = {
   },
 
   _deserialize(data) {
-    const node = MatchNode.create({id:data.id,turn:data.turn,lastMove:data.lastMove,label:data.label,
+    const node = MatchNode.create({id:data.id,turn:data.turn,lastMove:data.lastMove,label:data.label,eval:data.eval ?? null,
       isWin:  data.isWin  || false,
       winRun: data.winRun ? new Set(data.winRun) : null,
     });
@@ -984,9 +991,18 @@ const Match = {
       }
     });
 
+    // Collect evals: map position index to eval score
+    const evals = {};
+    positions.forEach((node, idx) => {
+      if (node.eval !== null && node.eval !== undefined && idx > 0) {
+        evals[idx] = node.eval;
+      }
+    });
+
     let out = JSON.stringify(serialized);
     if (focusIndex > 0) out += ';' + focusIndex;
     if (Object.keys(labels).length > 0) out += ';' + JSON.stringify(labels);
+    if (Object.keys(evals).length > 0) out += ';' + JSON.stringify(evals);
     return out;
   },
 
@@ -999,23 +1015,41 @@ const Match = {
   fromHextic(text, players = null) {
     if (!text?.trim()) return false;
 
-    let treeText = text, focusIndex = -1, labels = null;
+    let treeText = text, focusIndex = -1, labels = null, evals = null;
     const firstSemi = text.indexOf(';');
     if (firstSemi > 0) {
       const rest = text.slice(firstSemi + 1);
-      // Check if rest starts with { (labels JSON)
+      // Check if rest starts with { (could be labels or evals)
       if (rest.trim().startsWith('{')) {
         try {
-          labels = JSON.parse(rest);
+          const parsed = JSON.parse(rest);
+          // Evals are numeric, labels have 'type' or 'text'
+          if (typeof Object.values(parsed)[0] === 'number') {
+            evals = parsed;
+          } else {
+            labels = parsed;
+          }
         } catch { labels = null; }
       } else {
-        // Try parse as focusIndex;labels
+        // Try parse as focusIndex;labels;evals or focusIndex;labels
         const secondSemi = rest.indexOf(';');
         if (secondSemi > 0) {
           focusIndex = parseInt(rest.slice(0, secondSemi), 10);
-          try {
-            labels = JSON.parse(rest.slice(secondSemi + 1));
-          } catch { labels = null; }
+          const afterFocus = rest.slice(secondSemi + 1);
+          const thirdSemi = afterFocus.indexOf(';');
+          if (thirdSemi > 0) {
+            try { labels = JSON.parse(afterFocus.slice(0, thirdSemi)); } catch {}
+            try { evals = JSON.parse(afterFocus.slice(thirdSemi + 1)); } catch {}
+          } else {
+            try {
+              const parsed = JSON.parse(afterFocus);
+              if (typeof Object.values(parsed)[0] === 'number') {
+                evals = parsed;
+              } else {
+                labels = parsed;
+              }
+            } catch {}
+          }
         } else {
           focusIndex = parseInt(rest, 10);
         }
@@ -1110,6 +1144,27 @@ const Match = {
         }
       });
     }
+
+    // Restore evals if provided, otherwise compute them
+    const evalToCompute = [];
+    positions.forEach((node, idx) => {
+      if (evals && evals[idx] !== undefined) {
+        node.eval = evals[idx];
+      } else if (idx > 0 && node.grid?.cells) {
+        evalToCompute.push({ node, idx });
+      }
+    });
+
+    // Compute missing evals in background
+    evalToCompute.forEach(({ node, idx }) => {
+      Eval.evaluate(node.grid.cells, node.turn).then(score => {
+        node.eval = score;
+        if (idx === positions.indexOf(Match.currentNode)) {
+          Match._renderEvalBar(score);
+        }
+        Match._save();
+      });
+    });
 
     // Sync winCells from current node
     Match.winCells = Match.currentNode.isWin ? Match.currentNode.winRun : null;
