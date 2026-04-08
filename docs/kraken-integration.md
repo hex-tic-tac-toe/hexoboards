@@ -2,7 +2,7 @@
 
 ## API Endpoints
 
-The 6-tac Worker exposes stateless compute endpoints:
+The 6-tac Worker exposes session-agnostic compute primitives:
 
 - `POST /api/v1/compute/best-move` — Returns move immediately (sync)
 - `POST /api/v1/compute/eval` — Returns evaluation immediately (sync)
@@ -10,14 +10,21 @@ The 6-tac Worker exposes stateless compute endpoints:
 - `POST /api/v1/compute/eval/jobs` — Async job (returns jobId)
 - `GET /api/v1/compute/jobs/:id` — Poll job status
 
-## Request Format (our implementation)
+## Request Format
 
 ```json
 {
-  "position": { "turnsJson": "{\"turns\":[{\"stones\":[[q,r],[q,r]]},...]}" },
+  "position": { "turnsJson": "{\"stones\":[[q,r],[q,r],...]}" },
   "config": { "botName": "kraken" }
 }
 ```
+
+**Important:** Use `stones` format, NOT `turns` format!
+
+- ✅ `{"stones":[[0,0],[-1,0]]}` - 2 stones (1 move)
+- ✅ `{"stones":[[0,0],[-1,0],[1,-1],[0,-1]]}` - 4 stones (2 moves)
+- ✅ `{"stones":[]}` - empty
+- ❌ `{"turns":[...]}` - FAILS with error 1101
 
 ## Response Format
 
@@ -43,33 +50,45 @@ The 6-tac Worker exposes stateless compute endpoints:
 
 ## Current Implementation Behavior
 
-1. **Try sync endpoint first** - `/v1/compute/best-move` and `/v1/compute/eval`
-2. **On failure (any error/500)** - Bot returns `null`, eval falls back to 0.5 (equal)
-3. **User experience** - Move is cancelled, user can:
-   - Retry the move
-   - Switch to random bot
-   - Play manually
+1. **Sync endpoint first** - `/v1/compute/best-move` and `/v1/compute/eval`
+2. **On failure** - Bot returns `null`, eval falls back to 0.5 (equal)
+3. **User experience** - Move is cancelled, user can retry or switch bots
 
-This approach handles the 6-tac API bug gracefully without silent fallbacks to random.
+## Implementation Notes
 
-## Known Issues
+### Hexoboards → 6-tac Format
 
-### 6-tac API Bug (Error 1101) - CRITICAL
+Convert cells to stones array (sorted by turn):
+```javascript
+const stones = cellsArray
+  .filter(c => c.state !== 0)
+  .sort((a, b) => a.turn - b.turn)
+  .map(c => [c.q, c.r]);
+// Send as: JSON.stringify({ stones })
+```
 
-The 6-tac Worker throws exception (error 1101) on ANY position with stones:
+### 6-tac → Hexoboards Coordinate Conversion
 
-| turnsJson value | Result |
-|----------------|--------|
-| `{}` | ✅ works |
-| `{"turns":[]}` | ✅ works |
-| `{"turns":[{"stones":[...]}]}` | ❌ 500 error |
-| `{"turns":[]}` (escaped string) | ❌ 500 error |
-| Object with turns array | ❌ 500 error |
-| Any non-empty game | ❌ 500 error |
+6-tac returns cube coordinates `{x, y, z}`:
+```javascript
+const q = cube.x;
+const r = cube.z;
+```
 
-This is a confirmed bug in 6-tac's deployed Worker - our code is correct but their backend crashes.
+### Score Normalization
 
-**Only works:** Starting position (before any moves)
+6-tac: negative = X winning, positive = O winning  
+Hexoboards: 0 = X winning, 0.5 = equal, 1 = O winning
+
+Conversion: `0.5 - (score / 2)`
+
+## Files Modified
+
+- `public/strategies/js/modules/Bot.js` — Kraken bot with stones format
+- `public/strategies/js/modules/Eval.js` — Eval with stones format
+- `src/index.js` — Cloudflare Worker proxy
+- `dev_server.py` — Python dev server proxy
+- `docs/kraken-integration.md` — This documentation
 
 ## Implementation Notes
 
