@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "routes": [
     {
+      "src": "/api/kraken/(.*)",
+      "dest": "/api/kraken?__pathname=/$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "/api/proxy?__pathname=/$1"
     }

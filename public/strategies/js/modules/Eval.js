@@ -7,7 +7,7 @@
  * score = 0.0 (X winning) … 0.5 (equal) … 1.0 (O winning)
  */
 
-const KRAKEN_URL = 'https://6-tac.com';
+const KRAKEN_URL = '/api/kraken';
 const KRAKEN_TIMEOUT_MS = 30000;
 
 // Convert hexoboards cells to six-tac game_json format

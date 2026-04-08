@@ -17,7 +17,7 @@ import { HexGrid } from './HexGrid.js';
 
 // ── configuration ─────────────────────────────────────────────────────────────
 
-const KRAKEN_URL = 'https://6-tac.com';
+const KRAKEN_URL = '/api/kraken';
 const KRAKEN_TIMEOUT_MS = 30000;
 
 // ── helpers shared by all bots ───────────────────────────────────────────────
