@@ -10,11 +10,11 @@ The 6-tac Worker exposes stateless compute endpoints:
 - `POST /api/v1/compute/eval/jobs` — Async job (returns jobId)
 - `GET /api/v1/compute/jobs/:id` — Poll job status
 
-## Request Format
+## Request Format (our implementation)
 
 ```json
 {
-  "position": { "turnsJson": "{\"turns\":[...]}" },
+  "position": { "turnsJson": "{\"turns\":[{\"stones\":[[q,r],[q,r]]},...]}" },
   "config": { "botName": "kraken" }
 }
 ```
@@ -41,20 +41,32 @@ The 6-tac Worker exposes stateless compute endpoints:
 }
 ```
 
+## Current Implementation Behavior
+
+1. **Try sync endpoint first** - `/v1/compute/best-move` and `/v1/compute/eval`
+2. **On failure (any error/500)** - Bot returns `null`, eval falls back to 0.5 (equal)
+3. **User experience** - Move is cancelled, user can:
+   - Retry the move
+   - Switch to random bot
+   - Play manually
+
+This approach handles the 6-tac API bug gracefully without silent fallbacks to random.
+
 ## Known Issues
 
 ### 6-tac API Bug (Error 1101)
 
 The 6-tac Worker throws exception (error 1101) on non-empty game states:
-- Empty game `{"turns":[]}` → works
-- Any move placed `{"turns":[{"stones":[...]}]}` → 500 error
+- Empty game `{"turns":[]}` ✅ works
+- Any move placed `{"turns":[{"stones":[...]}]}` ❌ returns 500
 
-This is a bug in 6-tac's Worker, not in our implementation.
+This is a confirmed bug in 6-tac's Worker (not our code).
 
-**Workaround:** The bot returns `null` on failure, allowing the user to:
-- Retry the move
-- Switch to random bot
-- Play manually
+**What works:**
+- Empty starting position (before any moves)
+
+**What fails:**
+- Any position with stones placed
 
 ## Implementation Notes
 
@@ -90,7 +102,8 @@ Conversion: `0.5 - (score / 2)`
 
 ## Files Modified
 
-- `public/strategies/js/modules/Bot.js` — Kraken bot with sync API
-- `public/strategies/js/modules/Eval.js` — Eval with sync API  
-- `src/index.js` — Cloudflare Worker proxy (allows GET for job polling)
+- `public/strategies/js/modules/Bot.js` — Kraken bot with sync API, returns null on failure
+- `public/strategies/js/modules/Eval.js` — Eval with sync API, falls back to 0.5 on failure  
+- `src/index.js` — Cloudflare Worker proxy (allows GET for job status)
 - `dev_server.py` — Python dev server proxy (supports GET/POST)
+- `docs/kraken-integration.md` — This documentation
