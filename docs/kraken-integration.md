@@ -100,6 +100,11 @@ Hexoboards cells map to 6-tac turnsJson:
 // turnsJson: "{\"turns\":[{\"stones\":[[q,r],[q,r]]},...]}"
 ```
 
+### Critical Fix: Chronological Ordering
+IMPORTANT: Stones must be sent in chronological order by turn number. Without sorting, the API receives moves in a seemingly random order (based on Map iteration), which causes it to evaluate incorrect positions and return seemingly random or repetitive results.
+
+Fixed in Eval.js line 65: `.sort((a, b) => a.turn - b.turn)`
+
 ### 6-tac → Hexoboards Coordinate Conversion
 
 6-tac returns cube coordinates `{x, y, z}`:

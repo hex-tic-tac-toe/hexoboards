@@ -36,11 +36,14 @@ function _randomFrom(arr) {
 
 // Convert hexoboards cells to six-tac stones format
 // Format: {"stones":[[q,r],[q,r],...]}
+// IMPORTANT: Must sort by turn to send moves in chronological order
 function _cellsToStonesObject(cells) {
   const stones = [];
 
-  // Get all occupied cells
-  const cellsArray = Array.from(cells.values()).filter(c => c.state !== 0);
+  // Get all occupied cells and sort by turn chronologically
+  const cellsArray = Array.from(cells.values())
+    .filter(c => c.state !== 0)
+    .sort((a, b) => a.turn - b.turn);
 
   for (const cell of cellsArray) {
     stones.push([cell.q, cell.r]);
@@ -50,10 +53,17 @@ function _cellsToStonesObject(cells) {
 }
 
 // Convert cube {x,y,z} to axial {q,r}
-function _cubeToAxial(cube) {
-  const q = cube.x;
-  const r = cube.z;
-  return { q, r };
+function _cubeToAxial(stone) {
+  // Handle both object {x,y,z} and array [q,r] formats
+  if (Array.isArray(stone)) return { q: stone[0], r: stone[1] };
+  return { q: stone.x, r: stone.z };
+}
+
+// Check if two consecutive turns belong to the same player
+// Hextic turn structure: X plays 1 (turn 0), then pairs: OO XX OO XX …
+function _samePlayer(turnA, turnB) {
+  const p = t => { const i = t % 4; return (i === 0 || i === 3) ? 1 : 2; };
+  return p(turnA) === p(turnB);
 }
 
 // Poll job until complete
@@ -90,8 +100,17 @@ const BOT_REGISTRY = {
   kraken: {
     id:   'kraken',
     name: 'Kraken',
+    _cache: null, // { turn, move } — second move of the pair
     /** Neural MCTS bot via remote API. */
     async move(cells, turn) {
+      // Return cached second move if it matches the expected turn
+      if (this._cache && this._cache.turn === turn) {
+        const move = this._cache.move;
+        this._cache = null;
+        return move;
+      }
+      this._cache = null;
+
       // Convert cells to stones format and stringify
       const stonesObj = _cellsToStonesObject(cells);
       const stonesJson = JSON.stringify(stonesObj); // "{\"stones\":[...]}"
@@ -113,13 +132,17 @@ const BOT_REGISTRY = {
         clearTimeout(timeout);
 
         if (!response.ok) {
-          return await _krakenMoveViaJob(cells, stonesJson);
+          return await _krakenMoveViaJob(cells, stonesJson, turn);
         }
 
         const data = await response.json();
-        if (data.stones && data.stones.length >= 2) {
-          const first = data.stones[0];
-          return _cubeToAxial(first);
+        if (data.stones && data.stones.length >= 1) {
+          const first = _cubeToAxial(data.stones[0]);
+          // Only cache second move if the next turn belongs to the same player
+          if (data.stones.length >= 2 && _samePlayer(turn, turn + 1)) {
+            this._cache = { turn: turn + 1, move: _cubeToAxial(data.stones[1]) };
+          }
+          return first;
         }
       } catch {
         // Fall back to job-based
@@ -130,7 +153,7 @@ const BOT_REGISTRY = {
 };
 
 // Use job-based approach as fallback
-async function _krakenMoveViaJob(cells, stonesJson) {
+async function _krakenMoveViaJob(cells, stonesJson, turn) {
   try {
     const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
       method: 'POST',
@@ -151,8 +174,12 @@ async function _krakenMoveViaJob(cells, stonesJson) {
     const result = await _waitForJob(job.jobId, waitController);
     clearTimeout(waitTimeout);
 
-    if (result && result.stones && result.stones.length >= 2) {
-      return _cubeToAxial(result.stones[0]);
+    if (result && result.stones && result.stones.length >= 1) {
+      const first = _cubeToAxial(result.stones[0]);
+      if (result.stones.length >= 2 && _samePlayer(turn, turn + 1)) {
+        BOT_REGISTRY.kraken._cache = { turn: turn + 1, move: _cubeToAxial(result.stones[1]) };
+      }
+      return first;
     }
   } catch { }
   return null;

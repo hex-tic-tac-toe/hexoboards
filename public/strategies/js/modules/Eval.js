@@ -11,9 +11,12 @@ const KRAKEN_URL = '/api/kraken';
 const KRAKEN_TIMEOUT_MS = 60000;
 
 // Convert hexoboards cells to six-tac stones format (flat array)
+// IMPORTANT: Must sort by turn to send moves in chronological order
 function _cellsToStonesObject(cells) {
   const stones = [];
-  const cellsArray = Array.from(cells.values()).filter(c => c.state !== 0);
+  const cellsArray = Array.from(cells.values())
+    .filter(c => c.state !== 0)
+    .sort((a, b) => a.turn - b.turn); // Sort by turn chronologically
   for (const cell of cellsArray) {
     stones.push([cell.q, cell.r]);
   }
@@ -52,6 +55,10 @@ const Eval = {
       }
 
       const data = await response.json();
+      // Prefer winProb (X win probability) when available — more direct
+      if (typeof data.winProb === 'number' && Number.isFinite(data.winProb)) {
+        return Math.max(0, Math.min(1, 1 - data.winProb));
+      }
       if (typeof data.score === 'number' && Number.isFinite(data.score)) {
         const normalized = 0.5 - (data.score / 2);
         return Math.max(0, Math.min(1, normalized));

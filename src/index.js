@@ -25,6 +25,7 @@ function normalizeForwardedHost(value) {
 }
 
 function publicRequestUrl(request) {
+  const requestUrl = new URL(request.url);
   const forwardedHost = normalizeForwardedHost(request.headers.get('x-forwarded-host'));
   const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim();
 
@@ -37,6 +38,8 @@ function publicRequestUrl(request) {
     url.protocol = `${forwardedProto}:`;
   }
 
+  url.pathname = requestUrl.pathname;
+  url.search = requestUrl.search;
   url.hash = '';
   return url;
 }

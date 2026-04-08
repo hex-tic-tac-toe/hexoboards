@@ -155,6 +155,7 @@ const Match = {
     }
     Match.winCells = Match.currentNode.isWin ? Match.currentNode.winRun : null;
     Match._renderTree(); Match._buildBoard();
+    Match._renderEvalBar(Match.currentNode.eval ?? 0.5);
   },
 
   clear() {
@@ -367,8 +368,6 @@ const Match = {
     if (!skipRender) {
       Match._renderTree();
       Match._buildBoard();
-      // Eval bar update
-      Eval.evaluate(newCells, turn + 1).then(score => Match._renderEvalBar(score));
     } else {
       // Lightweight board-only refresh during bot runs (no tree rebuild)
       Match._buildBoard();
@@ -377,15 +376,19 @@ const Match = {
     return true;
   },
 
-  /**
-   * Bot move loop. Plays the full consecutive pair (or single first move) for
-   * the current player, then hands back to the human (or the opposing bot).
-   * Uses 100ms delay between moves so the UI stays responsive.
-   *
-   * Hextic turn structure: X plays 1 (first move only), then pairs of 2.
-   * _getPlayer() already encodes this — just keep playing while the same bot
-   * is still the active player.
-   */
+/**
+ * Bot move loop. Plays the correct number of moves for the current player
+ * according to Hextic turn structure, then hands back to the human 
+ * (or the opposing bot).
+ * Uses 100ms delay between moves so the UI stays responsive.
+ *
+ * Hextic turn structure: 
+ *   - Turn 0: X plays 1 move (first move only)
+ *   - Turns 1-2: O plays 2 moves
+ *   - Turns 3-4: X plays 2 moves
+ *   - Turns 5-6: O plays 2 moves
+ *   - etc.
+ */
   async _maybeTriggerBot() {
     if (Match._botRunning) return;
     if (Match.winCells)    return;
@@ -400,7 +403,15 @@ const Match = {
     const origText = turnEl?.textContent || '';
 
     try {
-      while (!Match.winCells) {
+      // Determine how many moves the current player should make
+      // Turn 0: X plays 1 move (special case for first move)
+      // All other turns: players play in pairs of 2 moves
+      const turn = Match._getTurn();
+      const movesToPlay = (turn === 0 && player === 1) ? 1 : 2;
+      
+      let movesPlayed = 0;
+      
+      while (!Match.winCells && movesPlayed < movesToPlay) {
         const nowPlayer = Match._getPlayer();
         const nowBotId  = nowPlayer === 1 ? Match.botX : Match.botO;
         // Stop if the active player changed to a human (or different bot)
@@ -418,6 +429,8 @@ const Match = {
         const cont = await Match._placeStone(move.q, move.r, false);
         Match._currentBotId = null;
         if (!cont) break;
+        
+        movesPlayed++;
       }
     } finally {
       Match._botRunning   = false;
@@ -437,6 +450,7 @@ const Match = {
     // Always sync winCells from the node being navigated to
     Match.winCells = node.isWin ? node.winRun : null;
     Match._renderTree(); Match._buildBoard();
+    Match._renderEvalBar(node.eval ?? 0.5);
   },
 
   _goToById(id) {
@@ -645,6 +659,7 @@ const Match = {
       Match._libNodeId   = null;
       Match.clearSelection();
       Match._save(); Match._renderTree(); Match._buildBoard();
+      Match._maybeTriggerBot();
     }));
 
     if (Match.tree?.children.length > 0) {
@@ -652,6 +667,7 @@ const Match = {
         Match._boardActive = true;
         Match._syncMatchPanels();
         Match._renderTree(); Match._buildBoard();
+        Match._maybeTriggerBot();
       }));
     }
 
@@ -749,7 +765,7 @@ const Match = {
       sel.appendChild(humanOpt);
       bots.forEach(bot => sel.appendChild(Object.assign(document.createElement('option'), { value: bot.id, textContent: bot.name })));
       sel.value = Match[botKey] || '';
-      sel.addEventListener('change', () => { Match[botKey] = sel.value || null; });
+      sel.addEventListener('change', () => { Match[botKey] = sel.value || null; Match._maybeTriggerBot(); });
       row.appendChild(sel);
 
       // Single move trigger
