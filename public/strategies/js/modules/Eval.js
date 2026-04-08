@@ -10,8 +10,8 @@
 const KRAKEN_URL = '/api/kraken';
 const KRAKEN_TIMEOUT_MS = 60000;
 
-// Convert hexoboards cells to six-tac turnsJson format
-function _cellsToTurnsJson(cells) {
+// Convert hexoboards cells to six-tac turns object
+function _cellsToTurnsObject(cells) {
   const turns = [];
   const stonesByTurn = new Map();
 
@@ -32,7 +32,7 @@ function _cellsToTurnsJson(cells) {
     }
   }
 
-  return JSON.stringify({ turns });
+  return { turns };
 }
 
 const Eval = {
@@ -43,18 +43,18 @@ const Eval = {
    * @returns {number} 0.0–1.0
    */
   async evaluate(cells /*, turn */) {
-    const turnsJson = _cellsToTurnsJson(cells);
+    const turnsObj = _cellsToTurnsObject(cells);
 
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
 
-      // Try sync endpoint first
+      // Try sync endpoint first - send object directly
       const response = await fetch(`${KRAKEN_URL}/v1/compute/eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          position: { turnsJson },
+          position: { turnsJson: turnsObj },
           config: { botName: 'kraken' }
         }),
         signal: controller.signal,

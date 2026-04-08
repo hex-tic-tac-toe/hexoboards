@@ -54,19 +54,22 @@ This approach handles the 6-tac API bug gracefully without silent fallbacks to r
 
 ## Known Issues
 
-### 6-tac API Bug (Error 1101)
+### 6-tac API Bug (Error 1101) - CRITICAL
 
-The 6-tac Worker throws exception (error 1101) on non-empty game states:
-- Empty game `{"turns":[]}` ✅ works
-- Any move placed `{"turns":[{"stones":[...]}]}` ❌ returns 500
+The 6-tac Worker throws exception (error 1101) on ANY position with stones:
 
-This is a confirmed bug in 6-tac's Worker (not our code).
+| turnsJson value | Result |
+|----------------|--------|
+| `{}` | ✅ works |
+| `{"turns":[]}` | ✅ works |
+| `{"turns":[{"stones":[...]}]}` | ❌ 500 error |
+| `{"turns":[]}` (escaped string) | ❌ 500 error |
+| Object with turns array | ❌ 500 error |
+| Any non-empty game | ❌ 500 error |
 
-**What works:**
-- Empty starting position (before any moves)
+This is a confirmed bug in 6-tac's deployed Worker - our code is correct but their backend crashes.
 
-**What fails:**
-- Any position with stones placed
+**Only works:** Starting position (before any moves)
 
 ## Implementation Notes
 

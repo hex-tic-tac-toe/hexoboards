@@ -34,9 +34,8 @@ function _randomFrom(arr) {
   return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
 }
 
-// Convert hexoboards cells to six-tac turnsJson format
-// Format: {"turns":[{"stones":[[q,r],[q,r]]},...]}
-function _cellsToTurnsJson(cells) {
+// Convert hexoboards cells to six-tac turns object (NOT stringified)
+function _cellsToTurnsObject(cells) {
   const turns = [];
   const stonesByTurn = new Map();
 
@@ -57,7 +56,7 @@ function _cellsToTurnsJson(cells) {
     }
   }
 
-  return JSON.stringify({ turns });
+  return { turns };
 }
 
 // Convert cube {x,y,z} to axial {q,r}
@@ -103,17 +102,17 @@ const BOT_REGISTRY = {
     name: 'Kraken',
     /** Neural MCTS bot via remote API. */
     async move(cells, turn) {
-      const turnsJson = _cellsToTurnsJson(cells);
+      const turnsObj = _cellsToTurnsObject(cells);
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
 
-        // Use sync endpoint first, fallback to jobs if needed
+        // Use sync endpoint first - send turns object directly, not as string
         const response = await fetch(`${KRAKEN_URL}/v1/compute/best-move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            position: { turnsJson },
+            position: { turnsJson: turnsObj },
             config: { botName: 'kraken' }
           }),
           signal: controller.signal,
@@ -122,8 +121,7 @@ const BOT_REGISTRY = {
         clearTimeout(timeout);
 
         if (!response.ok) {
-          // Try async job as fallback
-          return await _krakenMoveViaJob(cells, turnsJson);
+          return await _krakenMoveViaJob(cells, turnsObj);
         }
 
         const data = await response.json();
@@ -132,22 +130,21 @@ const BOT_REGISTRY = {
           return _cubeToAxial(first);
         }
       } catch {
-        // Fall back to job-based approach
+        // Fall back to job-based
       }
-      // Return null to cancel move - user can retry or switch bot
       return null;
     },
   },
 };
 
 // Use job-based approach as fallback
-async function _krakenMoveViaJob(cells, turnsJson) {
+async function _krakenMoveViaJob(cells, turnsObj) {
   try {
     const jobResponse = await fetch(`${KRAKEN_URL}/v1/compute/best-move/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        position: { turnsJson },
+        position: { turnsJson: turnsObj },
         config: { botName: 'kraken' }
       }),
     });
