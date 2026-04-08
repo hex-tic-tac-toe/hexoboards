@@ -15,6 +15,11 @@
 
 import { HexGrid } from './HexGrid.js';
 
+// ── configuration ─────────────────────────────────────────────────────────────
+
+const KRAKEN_URL = 'https://6-tac.com';
+const KRAKEN_TIMEOUT_MS = 30000;
+
 // ── helpers shared by all bots ───────────────────────────────────────────────
 
 function _legalMoves(cells) {
@@ -29,6 +34,33 @@ function _randomFrom(arr) {
   return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
 }
 
+// Convert hexoboards cells to six-tac game_json format
+// Format: {"turns":[{"stones":[[q,r],[q,r]]},...]}
+function _cellsToGameJson(cells) {
+  const turns = [];
+  const stonesByTurn = new Map();
+
+  for (const [, cell] of cells) {
+    if (cell.state === 0) continue;
+    const player = cell.state === 1 ? 'One' : 'Two';
+    const turn = cell.turn;
+    if (!stonesByTurn.has(turn)) {
+      stonesByTurn.set(turn, []);
+    }
+    stonesByTurn.get(turn).push([cell.q, cell.r]);
+  }
+
+  const sortedTurns = Array.from(stonesByTurn.keys()).sort((a, b) => a - b);
+  for (const turn of sortedTurns) {
+    const stones = stonesByTurn.get(turn);
+    if (stones.length >= 2) {
+      turns.push({ stones: [stones[0], stones[1]] });
+    }
+  }
+
+  return JSON.stringify({ turns });
+}
+
 // ── registry ─────────────────────────────────────────────────────────────────
 
 const BOT_REGISTRY = {
@@ -41,12 +73,41 @@ const BOT_REGISTRY = {
     },
   },
 
-  // Slot for future real implementations — structure shows what to fill in
-  // aggressive: {
-  //   id: 'aggressive',
-  //   name: 'Aggressive (stub)',
-  //   move(cells, turn) { return _randomFrom(_legalMoves(cells)); },
-  // },
+  kraken: {
+    id:   'kraken',
+    name: 'Kraken',
+    /** Neural MCTS bot via remote API. */
+    async move(cells, turn) {
+      const gameJson = _cellsToGameJson(cells);
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
+
+        const response = await fetch(`${KRAKEN_URL}/v1/best-move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bot_name: 'kraken', game_json: gameJson }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          console.error('Kraken API error:', response.status, response.statusText);
+          return _randomFrom(_legalMoves(cells));
+        }
+
+        const data = await response.json();
+        if (data.stones && data.stones.length >= 2) {
+          const [first, second] = data.stones;
+          return { q: first[0], r: first[1] };
+        }
+      } catch (err) {
+        console.error('Kraken move failed:', err.message);
+      }
+      return _randomFrom(_legalMoves(cells));
+    },
+  },
 };
 
 // ── public API ────────────────────────────────────────────────────────────────

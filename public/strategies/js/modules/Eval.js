@@ -7,6 +7,34 @@
  * score = 0.0 (X winning) … 0.5 (equal) … 1.0 (O winning)
  */
 
+const KRAKEN_URL = 'https://6-tac.com';
+const KRAKEN_TIMEOUT_MS = 30000;
+
+// Convert hexoboards cells to six-tac game_json format
+function _cellsToGameJson(cells) {
+  const turns = [];
+  const stonesByTurn = new Map();
+
+  for (const [, cell] of cells) {
+    if (cell.state === 0) continue;
+    const turn = cell.turn;
+    if (!stonesByTurn.has(turn)) {
+      stonesByTurn.set(turn, []);
+    }
+    stonesByTurn.get(turn).push([cell.q, cell.r]);
+  }
+
+  const sortedTurns = Array.from(stonesByTurn.keys()).sort((a, b) => a - b);
+  for (const turn of sortedTurns) {
+    const stones = stonesByTurn.get(turn);
+    if (stones.length >= 2) {
+      turns.push({ stones: [stones[0], stones[1]] });
+    }
+  }
+
+  return JSON.stringify({ turns });
+}
+
 const Eval = {
   /**
    * Evaluate a position.
@@ -15,8 +43,33 @@ const Eval = {
    * @returns {number} 0.0–1.0
    */
   async evaluate(cells /*, turn */) {
-    // Mocked: return 50/50 always
-    await new Promise(r => setTimeout(r, 0));
+    const gameJson = _cellsToGameJson(cells);
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), KRAKEN_TIMEOUT_MS);
+
+      const response = await fetch(`${KRAKEN_URL}/v1/eval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bot_name: 'kraken', game_json: gameJson }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return 0.5;
+      }
+
+      const data = await response.json();
+      if (typeof data.score === 'number' && data.score >= 0 && data.score <= 1) {
+        return data.score;
+      }
+    } catch (err) {
+      // Fall back to mock on any error
+    }
+
     return 0.5;
   },
 
