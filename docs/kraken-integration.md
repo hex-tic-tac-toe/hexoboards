@@ -125,7 +125,7 @@ Hexoboards eval bar uses 0-1 where:
 - 0.5 = equal
 - 1 = O winning
 
-Conversion: `0.5 - (score / 2)`
+Conversion: `0.5 + (score / 2)`
 
 ## Files Modified
 

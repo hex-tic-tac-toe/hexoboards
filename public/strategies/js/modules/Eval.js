@@ -60,7 +60,7 @@ const Eval = {
         return Math.max(0, Math.min(1, 1 - data.winProb));
       }
       if (typeof data.score === 'number' && Number.isFinite(data.score)) {
-        const normalized = 0.5 - (data.score / 2);
+        const normalized = 0.5 + (data.score / 2);
         return Math.max(0, Math.min(1, normalized));
       }
     } catch {
