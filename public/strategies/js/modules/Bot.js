@@ -69,20 +69,18 @@ function _cubeToAxial(cube) {
 
 // Poll job until complete
 async function _waitForJob(jobId, signal) {
-  const maxAttempts = 60;
+  const maxAttempts = 20;
   const interval = 500;
   for (let i = 0; i < maxAttempts; i++) {
     if (signal?.aborted) return null;
     try {
       const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
-      if (!resp.ok) break;
+      if (!resp.ok) return null;
       const job = await resp.json();
-      if (job.status === 'done') return job.result;
-      if (job.status === 'failed') {
-        console.error('Kraken job failed:', job.error);
-        return null;
-      }
-    } catch { break; }
+      if (job.status === 'done' && job.result) return job.result;
+      if (job.status === 'failed' || job.status === 'done') return null;
+      if (job.status === 'running' && i >= 5) return null;
+    } catch { return null; }
     await new Promise(r => setTimeout(r, interval));
   }
   return null;

@@ -37,20 +37,18 @@ function _cellsToTurnsJson(cells) {
 
 // Poll job until complete
 async function _waitForJob(jobId, signal) {
-  const maxAttempts = 60;
+  const maxAttempts = 20;
   const interval = 500;
   for (let i = 0; i < maxAttempts; i++) {
     if (signal?.aborted) return null;
     try {
       const resp = await fetch(`${KRAKEN_URL}/v1/compute/jobs/${jobId}`);
-      if (!resp.ok) break;
+      if (!resp.ok) return null;
       const job = await resp.json();
-      if (job.status === 'done') return job.result;
-      if (job.status === 'failed') {
-        console.error('Kraken eval job failed:', job.error);
-        return null;
-      }
-    } catch { break; }
+      if (job.status === 'done' && job.result) return job.result;
+      if (job.status === 'failed' || job.status === 'done') return null;
+      if (job.status === 'running' && i >= 5) return null; // Give up after 2.5s if still running
+    } catch { return null; }
     await new Promise(r => setTimeout(r, interval));
   }
   return null;
@@ -94,7 +92,7 @@ const Eval = {
 
       // Wait for job completion (with timeout)
       const waitController = new AbortController();
-      const waitTimeout = setTimeout(() => waitController.abort(), KRAKEN_TIMEOUT_MS);
+      const waitTimeout = setTimeout(() => waitController.abort(), 10000); // 10s max
       const result = await _waitForJob(job.jobId, waitController);
       clearTimeout(waitTimeout);
 
