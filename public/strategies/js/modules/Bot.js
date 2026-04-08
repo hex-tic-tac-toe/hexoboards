@@ -122,7 +122,6 @@ const BOT_REGISTRY = {
         clearTimeout(timeout);
 
         if (!jobResponse.ok) {
-          console.error('Kraken job error:', jobResponse.status);
           return _randomFrom(_legalMoves(cells));
         }
 
@@ -142,7 +141,7 @@ const BOT_REGISTRY = {
           return _cubeToAxial(first);
         }
       } catch (err) {
-        console.error('Kraken move failed:', err.message);
+        // Fall back to random on error
       }
       return _randomFrom(_legalMoves(cells));
     },
